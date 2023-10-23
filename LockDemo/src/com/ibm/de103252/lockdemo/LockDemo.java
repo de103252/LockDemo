@@ -17,6 +17,8 @@ import javax.swing.JFrame;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
+import javax.swing.JSplitPane;
+import javax.swing.JPanel;
 
 public class LockDemo {
     private JFrame frmDatabaseLockDemo;
@@ -25,6 +27,8 @@ public class LockDemo {
     private JTextArea lockDisplay;
     private Executor lockExecutor;
     private JScrollPane scrollPane;
+    private JPanel panel;
+    private JSplitPane splitPane;
 
     /**
      * Launch the application.
@@ -98,37 +102,48 @@ public class LockDemo {
         frmDatabaseLockDemo.setBounds(100, 100, 1045, 754);
         frmDatabaseLockDemo.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         GridBagLayout gridBagLayout = new GridBagLayout();
-        gridBagLayout.columnWidths = new int[] { 0, 0, 0 };
-        gridBagLayout.rowHeights = new int[] { 0, 0, 0 };
-        gridBagLayout.columnWeights = new double[] { 1.0, 1.0, Double.MIN_VALUE };
-        gridBagLayout.rowWeights = new double[] { 1.0, 1.0, Double.MIN_VALUE };
+        gridBagLayout.columnWidths = new int[] { 0, 0 };
+        gridBagLayout.rowHeights = new int[] { 0, 0 };
+        gridBagLayout.columnWeights = new double[] { 1.0, Double.MIN_VALUE };
+        gridBagLayout.rowWeights = new double[] { 1.0, Double.MIN_VALUE };
         frmDatabaseLockDemo.getContentPane().setLayout(gridBagLayout);
+        
+        splitPane = new JSplitPane();
+        splitPane.setResizeWeight(0.6);
+        splitPane.setOneTouchExpandable(true);
+        splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
+        GridBagConstraints gbc_splitPane = new GridBagConstraints();
+        gbc_splitPane.weighty = 70.0;
+        gbc_splitPane.fill = GridBagConstraints.BOTH;
+        gbc_splitPane.gridx = 0;
+        gbc_splitPane.gridy = 0;
+        frmDatabaseLockDemo.getContentPane().add(splitPane, gbc_splitPane);
+        
+        panel = new JPanel();
+        splitPane.setLeftComponent(panel);
+        GridBagLayout gbl_panel = new GridBagLayout();
+        gbl_panel.columnWidths = new int[]{0, 0, 0};
+        gbl_panel.rowHeights = new int[]{0, 0};
+        gbl_panel.columnWeights = new double[]{1.0, 1.0, Double.MIN_VALUE};
+        gbl_panel.rowWeights = new double[]{1.0, Double.MIN_VALUE};
+        panel.setLayout(gbl_panel);
         leftSqlPanel = new SqlPanel();
         GridBagConstraints gbc_leftSqlPanel = new GridBagConstraints();
-        gbc_leftSqlPanel.weightx = 50.0;
         gbc_leftSqlPanel.weighty = 70.0;
-        gbc_leftSqlPanel.insets = new Insets(5, 5, 5, 5);
         gbc_leftSqlPanel.fill = GridBagConstraints.BOTH;
+        gbc_leftSqlPanel.insets = new Insets(0, 0, 0, 5);
         gbc_leftSqlPanel.gridx = 0;
         gbc_leftSqlPanel.gridy = 0;
-        frmDatabaseLockDemo.getContentPane().add(leftSqlPanel, gbc_leftSqlPanel);
+        panel.add(leftSqlPanel, gbc_leftSqlPanel);
         rightSqlPanel = new SqlPanel();
         GridBagConstraints gbc_rightSqlPanel = new GridBagConstraints();
-        gbc_rightSqlPanel.weightx = 50.0;
         gbc_rightSqlPanel.weighty = 70.0;
-        gbc_rightSqlPanel.insets = new Insets(5, 5, 5, 0);
         gbc_rightSqlPanel.fill = GridBagConstraints.BOTH;
         gbc_rightSqlPanel.gridx = 1;
         gbc_rightSqlPanel.gridy = 0;
-        frmDatabaseLockDemo.getContentPane().add(rightSqlPanel, gbc_rightSqlPanel);
+        panel.add(rightSqlPanel, gbc_rightSqlPanel);
         scrollPane = new JScrollPane();
-        GridBagConstraints gbc_scrollPane = new GridBagConstraints();
-        gbc_scrollPane.weighty = 30.0;
-        gbc_scrollPane.fill = GridBagConstraints.BOTH;
-        gbc_scrollPane.gridwidth = 2;
-        gbc_scrollPane.gridx = 0;
-        gbc_scrollPane.gridy = 1;
-        frmDatabaseLockDemo.getContentPane().add(scrollPane, gbc_scrollPane);
+        splitPane.setRightComponent(scrollPane);
         lockDisplay = new JTextArea();
         lockDisplay.setToolTipText("Displays active locks in the database");
         scrollPane.setViewportView(lockDisplay);
