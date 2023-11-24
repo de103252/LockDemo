@@ -1,7 +1,7 @@
 package com.ibm.de103252.lockdemo;
 
+import java.awt.Component;
 import java.awt.EventQueue;
-import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -11,24 +11,35 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.prefs.Preferences;
 
+import javax.sql.rowset.JdbcRowSet;
+import javax.sql.rowset.RowSetProvider;
 import javax.swing.JFrame;
-import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
-import javax.swing.SwingUtilities;
-import javax.swing.JSplitPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
+import javax.swing.JTable;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.table.TableColumnModel;
+
+import org.apache.derby.diag.LockTable;
+
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 
 public class LockDemo {
     private JFrame frmDatabaseLockDemo;
     private SqlPanel leftSqlPanel;
     private SqlPanel rightSqlPanel;
-    private JTextArea lockDisplay;
-    private Executor lockExecutor;
     private JScrollPane scrollPane;
     private JPanel panel;
     private JSplitPane splitPane;
+    private JTable lockDisplay;
+    private JdbcRowSet lockRowSet;
 
     /**
      * Launch the application.
@@ -60,18 +71,19 @@ public class LockDemo {
     }
 
     private void initLockDisplay() throws SQLException {
-        lockExecutor = new Executor();
         new Thread(() -> updateLockInfo()).start();
     }
 
     private void updateLockInfo() {
         while (true) {
-            final String locks = lockExecutor.getLocks();
-            SwingUtilities.invokeLater(() -> {
-                if (!getLockDisplay().getText().equals(locks)) {
-                    getLockDisplay().setText(locks);
+            if (lockRowSet != null) {
+                try {
+                    lockRowSet.execute();
+                } catch (SQLException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
                 }
-            });
+            }
             try {
                 Thread.sleep(250);
             } catch (InterruptedException e) {
@@ -99,7 +111,7 @@ public class LockDemo {
     private void initialize() {
         frmDatabaseLockDemo = new JFrame();
         frmDatabaseLockDemo.setTitle("Database lock demo");
-        frmDatabaseLockDemo.setBounds(100, 100, 1045, 754);
+        frmDatabaseLockDemo.setBounds(100, 100, 915, 572);
         frmDatabaseLockDemo.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         GridBagLayout gridBagLayout = new GridBagLayout();
         gridBagLayout.columnWidths = new int[] { 0, 0 };
@@ -107,9 +119,9 @@ public class LockDemo {
         gridBagLayout.columnWeights = new double[] { 1.0, Double.MIN_VALUE };
         gridBagLayout.rowWeights = new double[] { 1.0, Double.MIN_VALUE };
         frmDatabaseLockDemo.getContentPane().setLayout(gridBagLayout);
-        
         splitPane = new JSplitPane();
-        splitPane.setResizeWeight(0.6);
+        splitPane.setContinuousLayout(true);
+        splitPane.setResizeWeight(0.8);
         splitPane.setOneTouchExpandable(true);
         splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
         GridBagConstraints gbc_splitPane = new GridBagConstraints();
@@ -118,14 +130,13 @@ public class LockDemo {
         gbc_splitPane.gridx = 0;
         gbc_splitPane.gridy = 0;
         frmDatabaseLockDemo.getContentPane().add(splitPane, gbc_splitPane);
-        
         panel = new JPanel();
         splitPane.setLeftComponent(panel);
         GridBagLayout gbl_panel = new GridBagLayout();
-        gbl_panel.columnWidths = new int[]{0, 0, 0};
-        gbl_panel.rowHeights = new int[]{0, 0};
-        gbl_panel.columnWeights = new double[]{1.0, 1.0, Double.MIN_VALUE};
-        gbl_panel.rowWeights = new double[]{1.0, Double.MIN_VALUE};
+        gbl_panel.columnWidths = new int[] { 0, 0, 0 };
+        gbl_panel.rowHeights = new int[] { 0, 0 };
+        gbl_panel.columnWeights = new double[] { 1.0, 1.0, Double.MIN_VALUE };
+        gbl_panel.rowWeights = new double[] { 1.0, Double.MIN_VALUE };
         panel.setLayout(gbl_panel);
         leftSqlPanel = new SqlPanel();
         GridBagConstraints gbc_leftSqlPanel = new GridBagConstraints();
@@ -143,21 +154,39 @@ public class LockDemo {
         gbc_rightSqlPanel.gridy = 0;
         panel.add(rightSqlPanel, gbc_rightSqlPanel);
         scrollPane = new JScrollPane();
+        scrollPane.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                resizeColumnWidth(lockDisplay);
+                lockDisplay.repaint();
+            }
+        });
         splitPane.setRightComponent(scrollPane);
-        lockDisplay = new JTextArea();
-        lockDisplay.setToolTipText("Displays active locks in the database");
+        lockDisplay = new JTable();
+        lockDisplay.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
         scrollPane.setViewportView(lockDisplay);
-        lockDisplay.setFont(new Font("Consolas", Font.PLAIN, 12));
         leftSqlPanel.getExecutor().addPropertyChangeListener(new PropertyChangeListener() {
             @Override
             public void propertyChange(PropertyChangeEvent evt) {
-                if (evt.getPropertyName().equals("connected") && ((boolean) evt.getNewValue()) == true) {
-                    try {
-                        lockExecutor.setConnection(LockDemo.this.openConnection(leftSqlPanel.getUrlTextField().getText()));
-                    } catch (SQLException e) {
-                        // TODO Auto-generated catch block
-                        e.printStackTrace();
+                if (evt.getPropertyName().equals("connected")) {
+                    connected((boolean) evt.getNewValue());
+                }
+            }
+
+            private void connected(boolean connected) {
+                try {
+                    if (connected) {
+                        lockRowSet = RowSetProvider.newFactory().createJdbcRowSet();
+                        lockRowSet.setUrl(leftSqlPanel.getUrlTextField().getText());
+                        lockRowSet.setCommand(leftSqlPanel.getExecutor().getLockSQL());
+                        lockRowSet.execute();
+                        getLockDisplay().setModel(new RowSetTableModel(lockRowSet));
+                    } else {
+                        lockRowSet.close();
                     }
+                } catch (SQLException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
                 }
             }
         });
@@ -171,7 +200,22 @@ public class LockDemo {
         return rightSqlPanel;
     }
 
-    public JTextArea getLockDisplay() {
+    public JTable getLockDisplay() {
         return lockDisplay;
+    }
+
+    public static void resizeColumnWidth(JTable table) {
+        final TableColumnModel columnModel = table.getColumnModel();
+        for (int column = 0; column < table.getColumnCount(); column++) {
+            int width = 15; // Min width
+            for (int row = 0; row < table.getRowCount(); row++) {
+                TableCellRenderer renderer = table.getCellRenderer(row, column);
+                Component comp = table.prepareRenderer(renderer, row, column);
+                width = Math.max(comp.getPreferredSize().width + 1, width);
+                width = Math.max(table.getColumnModel().getColumn(column).getPreferredWidth(), width);
+            }
+            width = Math.min(width, 300);
+            columnModel.getColumn(column).setPreferredWidth(width);
+        }
     }
 }

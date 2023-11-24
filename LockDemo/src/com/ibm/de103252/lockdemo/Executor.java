@@ -28,24 +28,133 @@ import java.util.stream.IntStream;
 import javax.swing.event.SwingPropertyChangeSupport;
 
 public class Executor {
+    private static final String getXidDb2 = "select 42, substr(CURRENT CLIENT_CORR_TOKEN,"
+            + "               locate_in_string(CURRENT CLIENT_CORR_TOKEN, '.', 1, 5) + 1) from sysibm.sysdummyu";
+    private static final String getXidDerby = "select " + Thread.currentThread().getId() + " as rnd, xid" + //
+            "  from SYSCS_DIAG.TRANSACTION_TABLE" + //
+            " where sql_text like 'select " + Thread.currentThread().getId() + "%'";
+    private static final String LOCK_SQL_DB2 = ""
+            + "select ACQUIRED_TS"
+            + ", CAST(LUWID AS CHAR(30)) LUWID"
+            + ", SSID"
+            + ", case SUBTYPE"
+            + "  when '00' then 'Page lock'"
+            + "  when '01' then 'Database lock'"
+            + "  when '02' then 'Page set lock'"
+            + "  when '03' then 'Data set lock (partition)'"
+            + "  when '05' then 'Index compression lock'"
+            + "  when '06' then 'Lock-specific partition'"
+            + "  when '07' then 'Page set or data set open'"
+            + "  when '08' then 'Utility I/O damage assessment'"
+            + "  when '09' then 'Page set piece locks'"
+            + "  when '0A' then 'DBET entry locks'"
+            + "  when '0D' then 'SYSLGRNG recording or GBP lock'"
+            + "  when '0E' then 'Utility serialization lock'"
+            + "  when '0F' then 'Mass delete lock for table'"
+            + "  when '10' then 'Table lock for segmented TS'"
+            + "  when '12' then 'Package lock'"
+            + "  when '18' then 'Row lock'"
+            + "  when '1F' then 'CDB P-lock'"
+            + "  when '22' then 'RLF P-lock'"
+            + "  when '27' then 'LPL or GRECP locks'"
+            + "  when '30' then 'LOB lock'"
+            + "  when '32' then 'LPL recovery lock'"
+            + "  when '36' then 'Adding partitions'"
+            + "  when '39' then 'Load DBD lock'"
+            + "  when '3A' then 'Dictionary build lock'"
+            + "  when '3B' then 'Dictionary load lock'"
+            + "  when '41' then 'Utility catalog access lock'"
+            + "  when '20' then 'WR claim'"
+            + "  when '40' then 'RR claim'"
+            + "  when '60' then 'RR, WR claim'"
+            + "  when '80' then 'CS claim'"
+            + "  when 'A0' then 'CS, WR claim'"
+            + "  end subtype"
+            + ", case DURATION"
+            + "  when '20' then 'Manual'"
+            + "  when '21' then 'Manual+1'"
+            + "  when '40' then 'Commit'"
+            + "  when '41' then 'Commit+1'"
+            + "  when '60' then 'Allocation'"
+            + "  when '80' then 'Plan'"
+            + "  when '81' then 'Utility'"
+            + "  when 'FE' then 'Interest'"
+            + "  when 'CM' then 'Commit'"
+            + "  when 'CH' then 'Cursor hold'"
+            + "  when 'AL' then 'Allocation'"
+            + "end duration"
+            + ", case STATE"
+            + "  when '01' then 'US'"
+            + "  when '02' then 'IS'"
+            + "  when '03' then 'IX'"
+            + "  when '04' then 'S'"
+            + "  when '05' then 'U'"
+            + "  when '06' then 'SIX'"
+            + "  when '07' then 'NSU'"
+            + "  when '08' then 'X'"
+            + "  when '09' then 'P-IX'"
+            + "  when '0A' then 'P-IS'"
+            + "  when '0B' then 'P-SIX'  "
+            + "   end state "
+            + ", DBNAME, CAST(TRIM(OBJECT_QUALIFIER || '.' || OBJECT_NAME) AS VARCHAR(50)) OBJECT, PAGENUM_OR_RID "
+            + "  from table(blocking_threads('A*:Z*'))"
+            + " where userid = current sqlid"
+            + "   and object_qualifier is not null"
+            + "   and dbname not like 'DSNDB%'"
+            + ""
+            + "";
+    private static final String LOCK_SQL_DERBY = ""
+            + "SELECT L.XID"        
+            + "     , L.TYPE"       
+            + "     , L.MODE"       
+            + "     , SUBSTR(L.TABLENAME, 1, 16) as TABLENAME"  
+            + "     , L.LOCKNAME"   
+            + "     , L.STATE"      
+            + "     , L.TABLETYPE"  
+            + "     , L.LOCKCOUNT"  
+            + "     , L.INDEXNAME"
+            + "     , T.STATUS"
+            + "     , T.FIRST_INSTANT"
+            + "     , T.SQL_TEXT"  
+            + "  FROM SYSCS_DIAG.LOCK_TABLE L"
+            + "  JOIN SYSCS_DIAG.TRANSACTION_TABLE T"
+            + "    ON L.XID = T.XID"
+            + " ORDER BY L.XID"
+            + "        , CASE L.TYPE "
+            + "               WHEN 'TABLE' THEN 1 "
+            + "               WHEN 'ROW' THEN 2 "
+            + "               ELSE 3 "
+            + "          END"
+            + "        , TABLENAME"
+            + "        , LOCKNAME"
+            + "        , L.MODE DESC"
+            + "";
     private static final List<Integer> NUMERIC_TYPES = List.of(DECIMAL, DOUBLE, FLOAT, INTEGER, SMALLINT, BIGINT);
     private boolean busy;
     private Connection connection;
+    private String dbProduct;
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
     private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this);
     private String result = "";
+
     private ResultSet resultSet;
     private boolean resultSetPositioned;
+
     private PreparedStatement stmt;
-    private String xid;
+
     private String url;
 
-    public String getUrl() {
-        return url;
-    }
+    private String xid;
 
-    public void setUrl(String url) {
-        this.url = url;
+    public static String getLocksSQL(String dbProduct) {
+        switch (dbProduct) {
+        case "Apache Derby":
+            return LOCK_SQL_DERBY;
+        case "DB2":
+            return LOCK_SQL_DB2;
+        default:
+            return null;
+        }
     }
 
     /**
@@ -142,39 +251,12 @@ public class Executor {
         }
     }
 
-    public String getLocksDerby() {
+    public String getLocks() {
         String result = "";
         if (getConnection() == null)
             return "";
         try {
-            // @formatter:off
-            try (PreparedStatement getLocks = getConnection().prepareStatement(""
-                    + "SELECT L.XID"        
-                    + "     , L.TYPE"       
-                    + "     , L.MODE"       
-                    + "     , SUBSTR(L.TABLENAME, 1, 16) as TABLENAME"  
-                    + "     , L.LOCKNAME"   
-                    + "     , L.STATE"      
-                    + "     , L.TABLETYPE"  
-                    + "     , L.LOCKCOUNT"  
-                    + "     , L.INDEXNAME"
-                    + "     , T.STATUS"
-                    + "     , T.FIRST_INSTANT"
-                    + "     , T.SQL_TEXT"  
-                    + "  FROM SYSCS_DIAG.LOCK_TABLE L"
-                    + "  JOIN SYSCS_DIAG.TRANSACTION_TABLE T"
-                    + "    ON L.XID = T.XID"
-                    + " ORDER BY L.XID"
-                    + "        , CASE L.TYPE "
-                    + "               WHEN 'TABLE' THEN 1 "
-                    + "               WHEN 'ROW' THEN 2 "
-                    + "               ELSE 3 "
-                    + "          END"
-                    + "        , TABLENAME"
-                    + "        , LOCKNAME"
-                    + "        , L.MODE DESC"
-                    + "")) {
-                // @formatter:on
+            try (PreparedStatement getLocks = getConnection().prepareStatement(getLockSQL())) {
                 ResultSet rs = getLocks.executeQuery();
                 result += headerRow(rs);
                 while (rs.next()) {
@@ -187,12 +269,20 @@ public class Executor {
         return result;
     }
 
+    public String getLockSQL() throws SQLException {
+        return getLocksSQL(getConnection().getMetaData().getDatabaseProductName());
+    }
+
     public String getResult() {
         return result;
     }
 
     public ResultSet getResultSet() {
         return resultSet;
+    }
+
+    public String getUrl() {
+        return url;
     }
 
     public boolean isBusy() {
@@ -274,6 +364,10 @@ public class Executor {
         }
     }
 
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
     public void update() {
         ex.submit(() -> update0());
     }
@@ -341,21 +435,12 @@ public class Executor {
             setTransactionId(null);
         }
     }
-
     private void execute0(String sqls) {
         List<String> statements = split(sqls);
         for (String sql : statements) {
             executeOne(sql);
         }
     }
-
-    private List<String> split(String sqls) {
-        return Arrays.asList(sqls.split(";"))
-                .stream()
-                .filter((s) -> !s.isBlank())
-                .collect(Collectors.toList());
-    }
-
     private void executeOne(String sql) {
         try {
             stmt = connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
@@ -417,15 +502,15 @@ public class Executor {
         }
     }
 
-    private static final String getXidDb2 = "select 42, substr(CURRENT CLIENT_CORR_TOKEN,"
-            + "               locate_in_string(CURRENT CLIENT_CORR_TOKEN, '.', 1, 5) + 1) from sysibm.sysdummyu";
-    private static final String getXidDerby = "select " + Thread.currentThread().getId() + " as rnd, xid" + //
-            "  from SYSCS_DIAG.TRANSACTION_TABLE" + //
-            " where sql_text like 'select " + Thread.currentThread().getId() + "%'";
-    private String dbProduct;
-
     private void rollback0() {
         endTransaction(false);
+    }
+
+    private List<String> split(String sqls) {
+        return Arrays.asList(sqls.split(";"))
+                .stream()
+                .filter((s) -> !s.isBlank())
+                .collect(Collectors.toList());
     }
 
     private void sqlException(SQLException e) {
@@ -446,126 +531,5 @@ public class Executor {
 
     protected void setTransactionId(String xid) {
         pcs.firePropertyChange("xid", this.xid, this.xid = xid);
-    }
-
-    public String getLocks() {
-        if (getConnection() == null)
-            return "";
-        try {
-            switch (getConnection().getMetaData().getDatabaseProductName()) {
-            case "Apache Derby":
-                return getLocksDerby();
-            case "DB2":
-                return getLocksDb2();
-            default:
-                return "Cannot retrieve lock information";
-            }
-        } catch (SQLException e) {
-            return e.toString();
-        }
-    }
-
-    public static String getLocksSQL(String dbProduct) {
-        switch (dbProduct) {
-        case "Apache Derby":
-            return "select *" //
-                    + "  from table(blocking_threads('A*:Z*'))" //
-                    + " where userid = current sqlid";
-        case "DB2":
-            return "select *"
-                    + "  from table(blocking_threads('A*:Z*'))"
-                    + " where userid = current sqlid";
-        default:
-            return null;
-        }
-    }
-
-    public String getLocksDb2() {
-        String result = "";
-        if (getConnection() == null)
-            return "";
-        try {
-            // @formatter:off
-            try (PreparedStatement getLocks = getConnection().prepareStatement(""
-                    + "select ACQUIRED_TS"
-                    + ", CAST(LUWID AS CHAR(30)) LUWID"
-                    + ", SSID"
-                    + ", case SUBTYPE"
-                    + "  when '00' then 'Page lock'"
-                    + "  when '01' then 'Database lock'"
-                    + "  when '02' then 'Page set lock'"
-                    + "  when '03' then 'Data set lock (partition)'"
-                    + "  when '05' then 'Index compression lock'"
-                    + "  when '06' then 'Lock-specific partition'"
-                    + "  when '07' then 'Page set or data set open'"
-                    + "  when '08' then 'Utility I/O damage assessment'"
-                    + "  when '09' then 'Page set piece locks'"
-                    + "  when '0A' then 'DBET entry locks'"
-                    + "  when '0D' then 'SYSLGRNG recording or GBP lock'"
-                    + "  when '0E' then 'Utility serialization lock'"
-                    + "  when '0F' then 'Mass delete lock for table'"
-                    + "  when '10' then 'Table lock for segmented TS'"
-                    + "  when '12' then 'Package lock'"
-                    + "  when '18' then 'Row lock'"
-                    + "  when '1F' then 'CDB P-lock'"
-                    + "  when '22' then 'RLF P-lock'"
-                    + "  when '27' then 'LPL or GRECP locks'"
-                    + "  when '30' then 'LOB lock'"
-                    + "  when '32' then 'LPL recovery lock'"
-                    + "  when '36' then 'Adding partitions'"
-                    + "  when '39' then 'Load DBD lock'"
-                    + "  when '3A' then 'Dictionary build lock'"
-                    + "  when '3B' then 'Dictionary load lock'"
-                    + "  when '41' then 'Utility catalog access lock'"
-                    + "  when '20' then 'WR claim'"
-                    + "  when '40' then 'RR claim'"
-                    + "  when '60' then 'RR, WR claim'"
-                    + "  when '80' then 'CS claim'"
-                    + "  when 'A0' then 'CS, WR claim'"
-                    + "  end subtype"
-                    + ", case DURATION"
-                    + "  when '20' then 'Manual'"
-                    + "  when '21' then 'Manual+1'"
-                    + "  when '40' then 'Commit'"
-                    + "  when '41' then 'Commit+1'"
-                    + "  when '60' then 'Allocation'"
-                    + "  when '80' then 'Plan'"
-                    + "  when '81' then 'Utility'"
-                    + "  when 'FE' then 'Interest'"
-                    + "  when 'CM' then 'Commit'"
-                    + "  when 'CH' then 'Cursor hold'"
-                    + "  when 'AL' then 'Allocation'"
-                    + "end duration"
-                    + ", case STATE"
-                    + "  when '01' then 'US'"
-                    + "  when '02' then 'IS'"
-                    + "  when '03' then 'IX'"
-                    + "  when '04' then 'S'"
-                    + "  when '05' then 'U'"
-                    + "  when '06' then 'SIX'"
-                    + "  when '07' then 'NSU'"
-                    + "  when '08' then 'X'"
-                    + "  when '09' then 'P-IX'"
-                    + "  when '0A' then 'P-IS'"
-                    + "  when '0B' then 'P-SIX'  "
-                    + "   end state "
-                    + ", DBNAME, CAST(TRIM(OBJECT_QUALIFIER || '.' || OBJECT_NAME) AS VARCHAR(50)) OBJECT, PAGENUM_OR_RID "
-                    + "  from table(blocking_threads('A*:Z*'))"
-                    + " where userid = current sqlid"
-                    + "   and object_qualifier is not null"
-                    + "   and dbname not like 'DSNDB%'"
-                    + ""
-                    + "")) {
-                // @formatter:on
-                ResultSet rs = getLocks.executeQuery();
-                result += headerRow(rs);
-                while (rs.next()) {
-                    result += rowToString(rs);
-                }
-            }
-        } catch (SQLException e) {
-            return "Unexpected error: " + e;
-        }
-        return result;
     }
 }
