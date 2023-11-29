@@ -1,53 +1,46 @@
--- Demonstrate locking in the HR schema
+DROP TABLE xemp;
 
-SET CURRENT SCHEMA = HRL;
+CREATE TABLE XEMP(
+  ID       INTEGER     NOT NULL  PRIMARY KEY,
+  LASTNAME VARCHAR(50) NOT NULL,
+  SALARY   DECIMAL(8, 2)
+);
 
--- Folgende SQL in verschiedenen Isolation Levels ausprobieren
--- oder mit der WITH [ UR | CS | RS | RR ] Klausel angehängt:
-SELECT * FROM EMPLOYEES;
-SELECT * FROM EMPLOYEES FOR READ ONLY;
+INSERT INTO xemp(ID, LASTNAME, SALARY)
+VALUES 
+(100, 'Meyer',   6000.00),
+(200, 'Smith',   3000.00),
+(201, 'Foster',  4000.00)
+;
 
--- Aggregatfunktionen, Joins
-SELECT avg(salary) FROM employees;
+INSERT INTO XEMP (ID, LASTNAME, SALARY)
+VALUES (210, 'Miller', 5000.00);
 
-SELECT * FROM EMPLOYEES
-NATURAL JOIN departments;
-  
--- Folgende SQLs links bzw. rechts eintippen und ausführen.
--- Rechte bzw. linke Seite committen.
--- Experimentieren Sie mit verschiedenen Isolation Levels links.
-SELECT AVG(salary) FROM employees WITH RS;
-UPDATE EMPLOYEES  SET salary = salary + 200 WHERE employee_id = 103;
-
-SELECT AVG(salary) FROM employees WITH RR;
-INSERT INTO employees VALUES ( 142, 'Schwartz', 50, 8765);
-
--- Versuchen Sie, ein Deadlock-Szenario herbeizuführen.
--- Hier eine Möglichkeit (erst selbst probieren...):
-
-
-
-SELECT * FROM EMPLOYEES WHERE employee_id = 103;
-UPDATE DEPARTMENTS SET department_name = 'Handling' WHERE department_id = 50;
-
-SELECT * FROM departments WHERE department_id = 50;
-UPDATE EMPLOYEES SET salary = salary * 1.1 WHERE employee_id = 103;
-
--- Klausuraufgabe aus DBMS-Implementierungen
-
-
--- Links -------------------------------  -- Rechts --------------------------------
-CREATE TABLE STAR
-(ID INTEGER, Name VARCHAR(20));
-              
-INSERT INTO STAR VALUES (3, 'Miley');
-                                          INSERT INTO STAR VALUES (7, 'Billie');
-INSERT INTO STAR VALUES (5, 'Taylor');
-                                          SELECT * FROM STAR; -- (1)
+UPDATE XEMP
+SET SALARY = SALARY * 1.1
+WHERE LASTNAME = 'Smith';
 COMMIT;
-                                          DELETE FROM STAR;
-SELECT * FROM STAR; -- (2)
-                                          ROLLBACK;
-                                          SELECT * FROM STAR; -- (3)
-COMMIT;
-11 COMMIT;
+DELETE FROM XEMP WHERE ID = 201;
+ROLLBACK;
+
+SELECT SUM(SALARY) AS TOTAL_SALARY FROM XEMP;
+
+
+--------
+
+create table emp(empno integer not null, salary decimal(8, 2))
+create table proj(projno integer not null, prjstdate date not null)
+insert into emp values (100, 12345.67), (101, 55555.55)
+insert into proj values (200, current date), (201, current date)
+
+-- 1
+select salary from emp where empno = 100 for update
+
+--3
+update proj set prjstdate = '20.10.2023' where projno = 200
+
+--2
+select prjstdate from proj where projno = 200 for update
+
+--4
+re
