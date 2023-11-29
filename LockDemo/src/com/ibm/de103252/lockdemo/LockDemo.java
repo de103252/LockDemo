@@ -11,9 +11,6 @@ import java.awt.event.ComponentEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.net.URL;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.prefs.Preferences;
 
@@ -87,13 +84,6 @@ public class LockDemo {
             } catch (InterruptedException e) {
             }
         }
-    }
-
-    private Connection openConnection(String url) throws SQLException {
-        Connection conn = DriverManager.getConnection(url);
-        conn.setAutoCommit(false);
-        conn.setHoldability(ResultSet.CLOSE_CURSORS_AT_COMMIT);
-        return conn;
     }
 
     /**
