@@ -1,18 +1,24 @@
-CREATE TABLE departments( 
-      department_id    DECIMAL(4)  CONSTRAINT dept_id_pk    PRIMARY KEY
-    , department_name  VARCHAR(30) CONSTRAINT dept_name_nn NOT NULL
+CREATE SCHEMA HRL;
+SET CURRENT SCHEMA = HRL;
+
+
+CREATE TABLE dept( 
+      did    DECIMAL(4)  CONSTRAINT dept_id_pk   PRIMARY KEY
+    , name   VARCHAR(30) NOT NULL
 );
 
-CREATE TABLE employees( 
-      employee_id    DECIMAL(6)   CONSTRAINT  emp_emp_id_pk
-                                  PRIMARY KEY
-    , last_name      VARCHAR(25)  CONSTRAINT emp_last_name_nn  NOT NULL
-    , department_id  DECIMAL(4)   CONSTRAINT emp_dept_fk    REFERENCES departments
-    , salary         DECIMAL(8,2) CONSTRAINT emp_salary_min
-                                  CHECK (salary > 0) 
+CREATE TABLE emp( 
+      eid    DECIMAL(6)    CONSTRAINT  emp_emp_id_pk
+                           PRIMARY KEY
+    , name   VARCHAR(25)   NOT NULL
+    , salary DECIMAL(9, 2) NOT NULL
+                           CONSTRAINT emp_sal_positive
+                           CHECK (SALARY >= 0)
+    , did    DECIMAL(4)    CONSTRAINT emp_dept_fk
+                           REFERENCES dept
 );
 
-INSERT INTO departments (department_id, department_name) VALUES
+INSERT INTO dept(did, name) VALUES
   ( 10, 'Administration')
 , ( 20, 'Marketing')
 , ( 30, 'Purchasing')
@@ -42,7 +48,7 @@ INSERT INTO departments (department_id, department_name) VALUES
 , ( 270, 'Payroll')
 ;
 
-INSERT INTO employees (employee_id, last_name,  salary, department_id)
+INSERT INTO emp(eid, name, salary, did)
 VALUES
   ( 100, 'King',       24000,  90)
 , ( 101, 'Kochhar',    17000,  90)
@@ -65,4 +71,3 @@ VALUES
 , ( 118, 'Himuro',      2600,  30)
 , ( 119, 'Colmenares',  2500,  30)
 , ( 120, 'Weiss',       8000,  50)
-;
