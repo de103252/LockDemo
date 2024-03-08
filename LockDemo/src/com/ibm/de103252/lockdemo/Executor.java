@@ -485,7 +485,14 @@ public class Executor {
         }
     }
 
-    private String retrieveCurrentXid() throws SQLException {
+    /**
+     * Retrieve an identifier (XID) for the current transaction.
+     * 
+     * @return A transaction identifier, or a dummy string if a transaction
+     *         identifier could not be retrieved.
+     * @throws SQLException
+     */
+    private String retrieveCurrentXid() {
         String xidSQL;
         switch (dbProduct) {
         case "Apache Derby":

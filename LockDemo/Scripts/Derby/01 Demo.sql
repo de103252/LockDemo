@@ -45,6 +45,12 @@ insert into emp(eid, name, salary) values(222, 'Doe', 4711);
 /* 3 L */ SELECT * FROM DEPT WHERE did = 50;
 /* 4 R */ SELECT * FROM EMP WHERE eid = 103;
 
+
+
+
+
+
+
 -- Klausuraufgabe aus DBMS-Implementierungen
 
 
@@ -52,13 +58,13 @@ insert into emp(eid, name, salary) values(222, 'Doe', 4711);
 CREATE TABLE STAR
 (ID INTEGER, Name VARCHAR(20));
               
-INSERT INTO STAR VALUES (3, 'Miley');
+INSERT INTO STAR VALUES (3, 'Miley');     
                                           INSERT INTO STAR VALUES (7, 'Billie');
 INSERT INTO STAR VALUES (5, 'Taylor');
-                                          SELECT * FROM STAR; -- (1)
+                                          SELECT * FROM STAR FOR READ ONLY; -- (1)
 COMMIT;
                                           DELETE FROM STAR;
-SELECT * FROM STAR; -- (2)
+SELECT * FROM STAR FOR READ ONLY; -- (2)
                                           ROLLBACK;
-                                          SELECT * FROM STAR; -- (3)
+                                          SELECT * FROM STAR FOR READ ONLY; -- (3)
 COMMIT;
