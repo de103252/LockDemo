@@ -29,8 +29,10 @@ import javax.swing.event.SwingPropertyChangeSupport;
 public class Executor {
     private static final String getXidDb2 = "select 42, substr(CURRENT CLIENT_CORR_TOKEN,"
             + "               locate_in_string(CURRENT CLIENT_CORR_TOKEN, '.', 1, 5) + 1) from sysibm.sysdummyu";
-    private static final String getXidDerby = "select " + Thread.currentThread().getId() + " as rnd, xid" + //
-            "  from SYSCS_DIAG.TRANSACTION_TABLE" + //
+    //@formatter:off
+    private static final String getXidDerby = 
+            "select " + Thread.currentThread().getId() + " as rnd, xid" +
+            "  from SYSCS_DIAG.TRANSACTION_TABLE" +
             " where sql_text like 'select " + Thread.currentThread().getId() + "%'";
     private static final String LOCK_SQL_DB2 = ""
             + "select ACQUIRED_TS"
@@ -128,6 +130,7 @@ public class Executor {
             + "        , LOCKNAME"
             + "        , L.MODE DESC"
             + "";
+    //@formatter:on
     private static final List<Integer> NUMERIC_TYPES = List.of(DECIMAL, DOUBLE, FLOAT, INTEGER, SMALLINT, BIGINT);
     private boolean busy;
     private Connection connection;
@@ -153,7 +156,26 @@ public class Executor {
     }
 
     /**
-     * Return a string representation of the column value or column header.
+     * Return a string representation of the column value.
+     * 
+     * @param rs
+     * @param i  Index of column
+     * @return A string representation, justified right or left depending on the
+     *         column type, and padded to the recommended display length.
+     */
+    private static String colToString(ResultSet rs, int i) {
+        try {
+            ResultSetMetaData rsmd = rs.getMetaData();
+            String align = NUMERIC_TYPES.contains(rsmd.getColumnType(i)) ? "" : "-";
+            int colWidth = Math.max(rsmd.getColumnDisplaySize(i), rsmd.getColumnLabel(i).length());
+            return String.format("%" + align + colWidth + "s", rs.getObject(i));
+        } catch (SQLException e) {
+            return e.toString();
+        }
+    }
+
+    /**
+     * Return a string representation of the column header.
      * 
      * @param rs
      * @param i      Index of column
@@ -161,12 +183,12 @@ public class Executor {
      * @return A string representation, justified right or left depending on the
      *         column type, and padded to the recommended display length.
      */
-    private static String colToString(ResultSet rs, int i, boolean header) {
+    private static String headerToString(ResultSet rs, int i) {
         try {
             ResultSetMetaData rsmd = rs.getMetaData();
             String align = NUMERIC_TYPES.contains(rsmd.getColumnType(i)) ? "" : "-";
             int colWidth = Math.max(rsmd.getColumnDisplaySize(i), rsmd.getColumnLabel(i).length());
-            return String.format("%" + align + colWidth + "s", header ? rsmd.getColumnLabel(i) : rs.getObject(i));
+            return String.format("%" + align + colWidth + "s", rsmd.getColumnLabel(i));
         } catch (SQLException e) {
             return e.toString();
         }
@@ -181,7 +203,10 @@ public class Executor {
      * @throws SQLException
      */
     private static String headerRow(ResultSet rs) throws SQLException {
-        return rowToString(rs, true);
+        return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount())
+                .mapToObj(i -> headerToString(rs, i))
+                .collect(Collectors.joining(" "))
+        + "\n";
     }
 
     /**
@@ -192,14 +217,10 @@ public class Executor {
      * @throws SQLException
      */
     private static String rowToString(ResultSet rs) throws SQLException {
-        return rowToString(rs, false);
-    }
-
-    private static String rowToString(ResultSet rs, boolean header) throws SQLException {
         return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount())
-                        .mapToObj(i -> colToString(rs, i, header))
-                        .collect(Collectors.joining(" "))
-                + "\n";
+                .mapToObj(i -> colToString(rs, i))
+                .collect(Collectors.joining(" "))
+        + "\n";
     }
 
     public void addPropertyChangeListener(PropertyChangeListener listener) {
@@ -353,8 +374,7 @@ public class Executor {
             try {
                 appendToResult(headerRow(getResultSet()));
             } catch (SQLException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
+                appendToResult(e);
             }
         }
     }
