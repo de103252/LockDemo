@@ -35,9 +35,9 @@
                             <addClasspath>true</addClasspath>
                             <mainClass>${main.class}</mainClass>
                         </manifest>
-                         <manifestEntries>
-        <Class-Path>db2jcc4.jar db2jcc_license_cisuz.jar</Class-Path>
-      </manifestEntries>
+                        <manifestEntries>
+                            <Class-Path>db2jcc4.jar db2jcc_license_cisuz.jar</Class-Path>
+                        </manifestEntries>
                     </archive>
                 </configuration>
 
@@ -61,6 +61,12 @@
             <version>[10.15,)</version>
         </dependency>
 
-    
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derbytools</artifactId>
+            <version>[10.15,)</version>
+        </dependency>
+
+
     </dependencies>
 </project>
