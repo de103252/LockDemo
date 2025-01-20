@@ -6,7 +6,6 @@ import static java.sql.Types.DOUBLE;
 import static java.sql.Types.FLOAT;
 import static java.sql.Types.INTEGER;
 import static java.sql.Types.SMALLINT;
-import static java.time.Instant.now;
 
 import java.beans.PropertyChangeListener;
 import java.sql.Connection;
@@ -16,7 +15,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.Arrays;
-import java.util.Date;
+import java.util.Calendar;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,7 +29,7 @@ public class Executor {
     private static final String getXidDb2 = "select 42, substr(CURRENT CLIENT_CORR_TOKEN,"
             + "               locate_in_string(CURRENT CLIENT_CORR_TOKEN, '.', 1, 5) + 1) from sysibm.sysdummyu";
     //@formatter:off
-    private static final String getXidDerby = 
+    private static final String getXidDerby =
             "select " + Thread.currentThread().getId() + " as rnd, xid" +
             "  from SYSCS_DIAG.TRANSACTION_TABLE" +
             " where sql_text like 'select " + Thread.currentThread().getId() + "%'";
@@ -131,7 +130,7 @@ public class Executor {
             + "        , L.MODE DESC"
             + "";
     //@formatter:on
-    private static final List<Integer> NUMERIC_TYPES = List.of(DECIMAL, DOUBLE, FLOAT, INTEGER, SMALLINT, BIGINT);
+    private static final List<Integer> NUMERIC_TYPES = Arrays.asList(DECIMAL, DOUBLE, FLOAT, INTEGER, SMALLINT, BIGINT);
     private boolean busy;
     private Connection connection;
     private String dbProduct;
@@ -157,7 +156,7 @@ public class Executor {
 
     /**
      * Return a string representation of the column value.
-     * 
+     *
      * @param rs
      * @param i  Index of column
      * @return A string representation, justified right or left depending on the
@@ -176,7 +175,7 @@ public class Executor {
 
     /**
      * Return a string representation of the column header.
-     * 
+     *
      * @param rs
      * @param i      Index of column
      * @param header Column header or column value?
@@ -197,7 +196,7 @@ public class Executor {
     /**
      * Return a header row for a result set, that is, the column labels padded to
      * the column display widths.
-     * 
+     *
      * @param rs
      * @return
      * @throws SQLException
@@ -211,7 +210,7 @@ public class Executor {
 
     /**
      * Return a data row for a result set.
-     * 
+     *
      * @param rs
      * @return
      * @throws SQLException
@@ -462,15 +461,21 @@ public class Executor {
     }
 
     private void executeOne(String sql) {
-        appendToResult(String.format("--- %tT %s", Date.from(now()), "-".repeat(80)));
+        if (getCurrentXid() == null) {
+            setTransactionId(retrieveCurrentXid());
+        }
+        appendToResult(String.format("--- %tT --------------------", Calendar.getInstance()));
         appendToResult(sql);
         if (sql.matches("(?i)commit(\\s+work)?")) {
             commit();
         } else if (sql.matches("(?i)rollback(\\s+work)?")) {
             rollback();
-        } else
+        } else {
             try {
-                stmt = connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
+                stmt = connection.prepareStatement(
+                        sql,
+                        ResultSet.TYPE_FORWARD_ONLY,
+                        ResultSet.CONCUR_UPDATABLE);
                 pcs.firePropertyChange("busy", this.busy, this.busy = true);
                 if (stmt.execute()) {
                     setResultSet(stmt.getResultSet());
@@ -478,13 +483,13 @@ public class Executor {
                     int count = stmt.getUpdateCount();
                     appendToResult(String.format("%d rows affected\n", count));
                 }
-                setTransactionId(retrieveCurrentXid());
             } catch (SQLException e) {
                 sqlException(e);
                 rollback0();
             } finally {
                 pcs.firePropertyChange("busy", this.busy, this.busy = false);
             }
+        }
     }
 
     private void next0() {
@@ -507,7 +512,7 @@ public class Executor {
 
     /**
      * Retrieve an identifier (XID) for the current transaction.
-     * 
+     *
      * @return A transaction identifier, or a dummy string if a transaction
      *         identifier could not be retrieved.
      * @throws SQLException
@@ -541,7 +546,7 @@ public class Executor {
     private List<String> split(String sqls) {
         return Arrays.asList(sqls.split(";"))
                      .stream()
-                     .filter((s) -> !s.isBlank())
+                     .filter((s) -> !s.trim().isEmpty())
                      .collect(Collectors.toList());
     }
 

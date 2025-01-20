@@ -5,7 +5,7 @@
 
 -- Demonstrate locking in the HR schema
 
-SET CURRENT SCHEMA = HRL;
+-- SET CURRENT SCHEMA = HRL;
 
 -- Folgende SQL in verschiedenen Isolation Levels ausprobieren
 -- oder mit der WITH [ UR | CS | RS | RR ] Klausel angehängt:
