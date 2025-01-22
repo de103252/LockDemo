@@ -21,8 +21,11 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
+import javax.swing.UIManager;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumnModel;
+
+import com.formdev.flatlaf.FlatIntelliJLaf;
 
 public class LockDemo {
     private JFrame frmDatabaseLockDemo;
@@ -97,10 +100,16 @@ public class LockDemo {
      * Initialize the contents of the frame.
      */
     private void initialize() {
+        setLookAndFeel();
         frmDatabaseLockDemo = new JFrame();
-        URL image = getClass().getResource("/lock.png");
-        frmDatabaseLockDemo.setIconImage(
-                Toolkit.getDefaultToolkit().getImage(image));
+        try {
+            URL image = getClass().getResource("/lock.png");
+            frmDatabaseLockDemo.setIconImage(
+                    Toolkit.getDefaultToolkit().getImage(image));
+        } catch (Exception e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
         frmDatabaseLockDemo.setTitle("Database lock demo");
         frmDatabaseLockDemo.setBounds(100, 100, 915, 572);
         frmDatabaseLockDemo.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -182,6 +191,14 @@ public class LockDemo {
                 }
             }
         });
+    }
+
+    private void setLookAndFeel() {
+        try {
+            UIManager.setLookAndFeel(new FlatIntelliJLaf());
+        } catch (Exception ex) {
+            System.err.println("Failed to initialize LaF");
+        }
     }
 
     public SqlPanel getLeftSqlPanel() {

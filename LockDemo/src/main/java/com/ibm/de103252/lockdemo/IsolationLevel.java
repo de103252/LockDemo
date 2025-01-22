@@ -3,8 +3,8 @@ package com.ibm.de103252.lockdemo;
 import java.sql.Connection;
 
 public enum IsolationLevel {
-    ReadCommitted(Connection.TRANSACTION_READ_COMMITTED), //
     ReadUncommitted(Connection.TRANSACTION_READ_UNCOMMITTED),
+    ReadCommitted(Connection.TRANSACTION_READ_COMMITTED),
     RepeatableRead(Connection.TRANSACTION_REPEATABLE_READ),
     Serializable(Connection.TRANSACTION_SERIALIZABLE);
 

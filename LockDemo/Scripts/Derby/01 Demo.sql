@@ -24,9 +24,11 @@ NATURAL JOIN DEPT;
 SELECT AVG(salary) FROM EMP WITH RS;
 UPDATE EMP  SET salary = salary + 200 WHERE eid = 103;
 
--- Experimentieren Sie mit verschiedenen Isolation Levels links.
-SELECT AVG(salary) FROM EMP WITH RR;
-INSERT INTO EMP VALUES ( 142, 'Schwartz', 50, 8765);
+-- Experimentieren Sie mit verschiedenen Isolation Levels rechts
+-- und versuchen Sie insbesondere, die verschiedenen Anomalien
+-- (dirty read, non-repeatable read) nachzuvollziehen.
+/* L */ INSERT INTO EMP VALUES ( 142, 'Schwartz', 50, 30);
+/* R */ SELECT AVG(salary) AS "Average salary" FROM EMP WITH RR;
 
 -- Experimentieren Sie mit Suchbereichen:
 SELECT AVG(salary) FROM EMP

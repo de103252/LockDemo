@@ -30,9 +30,9 @@ public class Executor {
             + "               locate_in_string(CURRENT CLIENT_CORR_TOKEN, '.', 1, 5) + 1) from sysibm.sysdummyu";
     //@formatter:off
     private static final String getXidDerby =
-            "select " + Thread.currentThread().getId() + " as rnd, xid" +
+            "select " + Thread.currentThread().threadId() + " as rnd, xid" +
             "  from SYSCS_DIAG.TRANSACTION_TABLE" +
-            " where sql_text like 'select " + Thread.currentThread().getId() + "%'";
+            " where sql_text like 'select " + Thread.currentThread().threadId() + "%'";
     private static final String LOCK_SQL_DB2 = ""
             + "select ACQUIRED_TS"
             + ", CAST(LUWID AS CHAR(30)) LUWID"
@@ -461,21 +461,15 @@ public class Executor {
     }
 
     private void executeOne(String sql) {
-        if (getCurrentXid() == null) {
-            setTransactionId(retrieveCurrentXid());
-        }
-        appendToResult(String.format("--- %tT --------------------", Calendar.getInstance()));
+        appendToResult(String.format("--- %tT -----------------------", Calendar.getInstance()));
         appendToResult(sql);
         if (sql.matches("(?i)commit(\\s+work)?")) {
             commit();
         } else if (sql.matches("(?i)rollback(\\s+work)?")) {
             rollback();
-        } else {
+        } else
             try {
-                stmt = connection.prepareStatement(
-                        sql,
-                        ResultSet.TYPE_FORWARD_ONLY,
-                        ResultSet.CONCUR_UPDATABLE);
+                stmt = connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
                 pcs.firePropertyChange("busy", this.busy, this.busy = true);
                 if (stmt.execute()) {
                     setResultSet(stmt.getResultSet());
@@ -483,13 +477,13 @@ public class Executor {
                     int count = stmt.getUpdateCount();
                     appendToResult(String.format("%d rows affected\n", count));
                 }
+                setTransactionId(retrieveCurrentXid());
             } catch (SQLException e) {
                 sqlException(e);
                 rollback0();
             } finally {
                 pcs.firePropertyChange("busy", this.busy, this.busy = false);
             }
-        }
     }
 
     private void next0() {
@@ -500,6 +494,7 @@ public class Executor {
                     appendToResult(rowToString(getResultSet()));
                     resultSetPositioned = true;
                 } else {
+                    appendToResult("-- End of result set -----------------------");
                     closeResultSet();
                 }
             }

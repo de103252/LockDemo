@@ -102,6 +102,7 @@ public class SqlPanel extends JPanel {
         isolationLabel.setLabelFor(isolationLevel);
         isolationLevel.setToolTipText("Select isolation level for next transaction");
         isolationLevel.setModel(new DefaultComboBoxModel<IsolationLevel>(IsolationLevel.values()));
+        isolationLevel.setSelectedIndex(IsolationLevel.ReadCommitted.ordinal());
         isolationPanel.add(isolationLevel);
         JScrollPane scrollPane_1 = new JScrollPane();
         GridBagConstraints gbc_scrollPane_1 = new GridBagConstraints();
@@ -239,7 +240,6 @@ public class SqlPanel extends JPanel {
                 cbm.addElement("jdbc:derby://localhost:1527/DBIDB");
             }
             getUrlTextField().setModel(cbm);
-        } else {
         }
     }
 
