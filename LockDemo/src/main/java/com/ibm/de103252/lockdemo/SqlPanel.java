@@ -139,7 +139,6 @@ public class SqlPanel extends JPanel {
         gbc_buttonPanel.gridy = 5;
         add(buttonPanel, gbc_buttonPanel);
         executeButton = new JButton("Execute");
-        executeButton.setMnemonic('x');
         executeButton.setToolTipText("Execute SQL");
         executeButton.setEnabled(false);
         executeButton.addActionListener(e -> {
@@ -150,23 +149,19 @@ public class SqlPanel extends JPanel {
         });
         buttonPanel.add(executeButton);
         nextButton = new JButton("Next");
-        nextButton.setMnemonic('n');
         nextButton.setToolTipText("Move result set to next row");
         nextButton.setEnabled(false);
         buttonPanel.add(nextButton);
         commitButton = new JButton("Commit");
-        commitButton.setMnemonic('c');
         commitButton.setToolTipText("Commit the current transaction");
         commitButton.addActionListener(e -> executor.commit());
         updateButton = new JButton("Update");
-        updateButton.setMnemonic('u');
         updateButton.setToolTipText("Update row that the current result set is positioned on");
         updateButton.setEnabled(false);
         buttonPanel.add(updateButton);
         commitButton.setEnabled(executor.isInTransaction());
         buttonPanel.add(commitButton);
         rollbackButton = new JButton("Rollback");
-        rollbackButton.setMnemonic('r');
         rollbackButton.setToolTipText("Roll the current transaction back");
         rollbackButton.addActionListener(e -> executor.rollback());
         rollbackButton.setEnabled(executor.isInTransaction());
@@ -343,5 +338,13 @@ public class SqlPanel extends JPanel {
 
     protected JComboBox<IsolationLevel> getIsolationLevel() {
         return isolationLevel;
+    }
+
+    void setMnemonics(boolean right) {
+        getExecuteButton().setMnemonic(right ? '6' : '1');
+        getNextButton().setMnemonic(right ? '7' : '2');
+        getUpdateButton().setMnemonic(right ? '8' : '3');
+        getCommitButton().setMnemonic(right ? '9' : '4');
+        getRollbackButton().setMnemonic(right ? '0' : '5');
     }
 }
