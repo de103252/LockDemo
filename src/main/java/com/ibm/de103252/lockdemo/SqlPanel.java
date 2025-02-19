@@ -139,7 +139,7 @@ public class SqlPanel extends JPanel {
         gbc_buttonPanel.gridy = 5;
         add(buttonPanel, gbc_buttonPanel);
         executeButton = new JButton("Execute");
-        executeButton.setToolTipText("Execute SQL");
+        executeButton.setToolTipText("Execute selected SQL statement");
         executeButton.setEnabled(false);
         executeButton.addActionListener(e -> {
             IsolationLevel selectedIsolation = (IsolationLevel) getIsolationLevel().getSelectedItem();
@@ -171,7 +171,7 @@ public class SqlPanel extends JPanel {
         busy.setBackground(Color.LIGHT_GRAY);
         busy.setHorizontalAlignment(SwingConstants.CENTER);
         GridBagConstraints gbc_busy = new GridBagConstraints();
-        gbc_busy.insets = new Insets(0, 0, 5, 0);
+        gbc_busy.insets = new Insets(0, 5, 5, 5);
         gbc_busy.fill = GridBagConstraints.HORIZONTAL;
         gbc_busy.gridx = 0;
         gbc_busy.gridy = 1;
