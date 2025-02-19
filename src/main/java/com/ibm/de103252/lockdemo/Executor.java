@@ -235,13 +235,12 @@ public class Executor {
     }
 
     public void disconnect() {
-        rollback();
         try {
             connection.close();
-        } catch (SQLException e) {
-            appendToResult(e);
-        } finally {
             setConnection(null);
+        } catch (SQLException e) {
+            // If a tx is open, connection will not close. User must rollback first.
+            appendToResult(e);
         }
     }
 
@@ -342,9 +341,9 @@ public class Executor {
     }
 
     public void setConnection(Connection connection) {
-        boolean wasConnected = isConnected();
+        boolean wasConnected = getConnection() != null;
         this.connection = connection;
-        pcs.firePropertyChange("connected", wasConnected, isConnected());
+        pcs.firePropertyChange("connected", wasConnected, connection != null);
     }
 
     public void setIsolationLevel(int isolationLevel) {

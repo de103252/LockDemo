@@ -180,7 +180,7 @@ public class LockDemo {
                 try {
                     if (connected) {
                         lockRowSet = RowSetProvider.newFactory().createJdbcRowSet();
-                        lockRowSet.setUrl(leftSqlPanel.getUrlTextField().getSelectedItem().toString());
+                        lockRowSet.setUrl(leftSqlPanel.getUrlComboBox().getSelectedItem().toString());
                         lockRowSet.setCommand(leftSqlPanel.getExecutor().getLockSQL());
                         lockRowSet.execute();
                         getLockDisplay().setModel(new RowSetTableModel(lockRowSet));

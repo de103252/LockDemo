@@ -30,7 +30,7 @@ public class SqlPanel extends JPanel {
      */
     private final Executor executor = new Executor();
     private JTextArea sql;
-    private JComboBox<String> urlTextField;
+    private JComboBox<String> urlComboBox;
     private JButton connectButton;
     private JLabel busy;
     private JButton nextButton;
@@ -70,8 +70,8 @@ public class SqlPanel extends JPanel {
         gbl_panel.columnWeights = new double[] { 1.0, 0.0, Double.MIN_VALUE };
         gbl_panel.rowWeights = new double[] { 0.0, Double.MIN_VALUE };
         panel.setLayout(gbl_panel);
-        urlTextField = new JComboBox<String>();
-        urlTextField.setEditable(true);
+        urlComboBox = new JComboBox<String>();
+        urlComboBox.setEditable(true);
         GridBagConstraints gbc_urlTextField = new GridBagConstraints();
         gbc_urlTextField.weightx = 1.0;
         gbc_urlTextField.fill = GridBagConstraints.HORIZONTAL;
@@ -79,7 +79,7 @@ public class SqlPanel extends JPanel {
         gbc_urlTextField.insets = new Insets(0, 0, 0, 5);
         gbc_urlTextField.gridx = 0;
         gbc_urlTextField.gridy = 0;
-        panel.add(urlTextField, gbc_urlTextField);
+        panel.add(urlComboBox, gbc_urlTextField);
         connectButton = new JButton("Connect");
         connectButton.setToolTipText("Connect to the data source");
         connectButton.setEnabled(false);
@@ -212,7 +212,7 @@ public class SqlPanel extends JPanel {
         if (getExecutor().isConnected()) {
             getExecutor().disconnect();
         } else {
-            getExecutor().setUrl(getUrlTextField().getSelectedItem().toString());
+            getExecutor().setUrl(getUrlComboBox().getSelectedItem().toString());
             getExecutor().connect();
         }
     }
@@ -234,7 +234,7 @@ public class SqlPanel extends JPanel {
                 cbm.addElement("jdbc:derby:derbyDB;create=true");
                 cbm.addElement("jdbc:derby://localhost:1527/DBIDB");
             }
-            getUrlTextField().setModel(cbm);
+            getUrlComboBox().setModel(cbm);
         }
     }
 
@@ -243,6 +243,7 @@ public class SqlPanel extends JPanel {
         boolean isInTransaction = getExecutor().isInTransaction();
         boolean isConnected = getExecutor().isConnected();
         if (isBusy) {
+            getUrlComboBox().setEnabled(false);
             getBusy().setBackground(Color.RED);
             getBusy().setText("Busy: " + getExecutor().getCurrentXid());
             getNextButton().setEnabled(false);
@@ -253,6 +254,7 @@ public class SqlPanel extends JPanel {
             getIsolationLevel().setEnabled(false);
             getConnectButton().setEnabled(false);
         } else if (isInTransaction) {
+            getUrlComboBox().setEnabled(false);
             getBusy().setBackground(Color.YELLOW);
             getBusy().setText("In Tx: " + getExecutor().getCurrentXid());
             getNextButton().setEnabled(getExecutor().isResultSetOpen());
@@ -263,6 +265,7 @@ public class SqlPanel extends JPanel {
             getIsolationLevel().setEnabled(false);
             getConnectButton().setEnabled(true);
         } else if (isConnected) {
+            getUrlComboBox().setEnabled(false);
             getBusy().setBackground(Color.GREEN);
             getBusy().setText("Connected");
             getCommitButton().setEnabled(false);
@@ -275,6 +278,7 @@ public class SqlPanel extends JPanel {
             getConnectButton().setText("Disconnect");
             getConnectButton().setEnabled(true);
         } else {
+            getUrlComboBox().setEnabled(true);
             getBusy().setBackground(Color.GRAY);
             getBusy().setText("Disconnected");
             getCommitButton().setEnabled(false);
@@ -283,7 +287,7 @@ public class SqlPanel extends JPanel {
             getExecuteButton().setEnabled(false);
             getIsolationLevel().setEnabled(false);
             getConnectButton().setText("Connect");
-            getConnectButton().setEnabled(notBlank(getUrlTextField().getSelectedItem().toString()));
+            getConnectButton().setEnabled(notBlank(getUrlComboBox().getSelectedItem().toString()));
         }
     }
 
@@ -308,8 +312,8 @@ public class SqlPanel extends JPanel {
         return connectButton;
     }
 
-    public JComboBox<String> getUrlTextField() {
-        return urlTextField;
+    public JComboBox<String> getUrlComboBox() {
+        return urlComboBox;
     }
 
     public JLabel getBusy() {
