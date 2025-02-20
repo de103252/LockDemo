@@ -234,6 +234,11 @@ public class Executor {
         ex.submit(() -> connect0(getUrl()));
     }
 
+    public void connect(String url) {
+        setUrl(url);
+        connect();
+    }
+
     public void disconnect() {
         try {
             connection.close();

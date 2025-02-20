@@ -212,8 +212,7 @@ public class SqlPanel extends JPanel {
         if (getExecutor().isConnected()) {
             getExecutor().disconnect();
         } else {
-            getExecutor().setUrl(getUrlComboBox().getSelectedItem().toString());
-            getExecutor().connect();
+            getExecutor().connect(getUrlComboBox().getSelectedItem().toString());
         }
     }
 
@@ -238,6 +237,10 @@ public class SqlPanel extends JPanel {
         }
     }
 
+    /*
+     * Enable or disable UI elements depending on connection status and whether a
+     * transaction is active.
+     */
     private void updateControls() {
         boolean isBusy = getExecutor().isBusy();
         boolean isInTransaction = getExecutor().isInTransaction();
