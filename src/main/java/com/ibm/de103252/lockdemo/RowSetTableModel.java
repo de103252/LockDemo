@@ -108,7 +108,7 @@ public class RowSetTableModel extends AbstractTableModel implements RowSetListen
             break;
         }
         case Types.BLOB: {
-            cname = "java.ssql.Blob";
+            cname = "java.sql.Blob";
             break;
         }
         case Types.REF: {

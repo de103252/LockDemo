@@ -8,6 +8,7 @@ import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.net.URL;
@@ -16,16 +17,25 @@ import java.util.prefs.Preferences;
 
 import javax.sql.rowset.JdbcRowSet;
 import javax.sql.rowset.RowSetProvider;
+import javax.swing.ButtonGroup;
 import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
+import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumnModel;
 
+import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatIntelliJLaf;
+import com.formdev.flatlaf.FlatLightLaf;
 
 public class LockDemo {
     private JFrame frmDatabaseLockDemo;
@@ -36,6 +46,7 @@ public class LockDemo {
     private JSplitPane splitPane;
     private JTable lockDisplay;
     private JdbcRowSet lockRowSet;
+    private volatile boolean running = true;
 
     /**
      * Launch the application.
@@ -44,6 +55,13 @@ public class LockDemo {
         Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
         prefs.keys();
         final LockDemo window = new LockDemo();
+        
+        // Add shutdown hook for cleanup
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Shutting down LockDemo...");
+            window.shutdown();
+        }));
+        
         startEmbeddedDerby();
         EventQueue.invokeLater(new Runnable() {
             @Override
@@ -58,7 +76,7 @@ public class LockDemo {
         try {
             window.initLockDisplay();
         } catch (SQLException e) {
-            // TODO Auto-generated catch block
+            System.err.println("Failed to initialize lock display: " + e.getMessage());
             e.printStackTrace();
         }
         prefs.flush();
@@ -73,20 +91,48 @@ public class LockDemo {
     }
 
     private void updateLockInfo() {
-        while (true) {
+        while (running) {
             if (lockRowSet != null) {
                 try {
                     lockRowSet.execute();
                 } catch (SQLException e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
+                    System.err.println("Error updating lock info: " + e.getMessage());
                 }
             }
             try {
                 Thread.sleep(250);
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
             }
         }
+    }
+    
+    /**
+     * Shutdown the application and clean up resources.
+     */
+    public void shutdown() {
+        running = false;
+        
+        // Close lock rowset
+        if (lockRowSet != null) {
+            try {
+                lockRowSet.close();
+                System.out.println("Lock rowset closed");
+            } catch (SQLException e) {
+                System.err.println("Error closing lock rowset: " + e.getMessage());
+            }
+        }
+        
+        // Shutdown executors and close connections
+        if (leftSqlPanel != null) {
+            leftSqlPanel.shutdown();
+        }
+        if (rightSqlPanel != null) {
+            rightSqlPanel.shutdown();
+        }
+        
+        System.out.println("LockDemo shutdown complete");
     }
 
     /**
@@ -113,6 +159,10 @@ public class LockDemo {
         frmDatabaseLockDemo.setTitle("Database lock demo");
         frmDatabaseLockDemo.setBounds(100, 100, 915, 572);
         frmDatabaseLockDemo.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        
+        // Create menu bar
+        createMenuBar();
+        
         GridBagLayout gridBagLayout = new GridBagLayout();
         gridBagLayout.columnWidths = new int[] { 0, 0 };
         gridBagLayout.rowHeights = new int[] { 0, 0 };
@@ -196,11 +246,138 @@ public class LockDemo {
     }
 
     private void setLookAndFeel() {
+        Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
+        String theme = prefs.get("theme", "IntelliJ");
+        applyTheme(theme);
+    }
+    
+    /**
+     * Apply a theme to the application.
+     *
+     * @param themeName The name of the theme: "Light", "Dark", or "IntelliJ"
+     */
+    private void applyTheme(String themeName) {
         try {
-            UIManager.setLookAndFeel(new FlatIntelliJLaf());
+            switch (themeName) {
+                case "Light":
+                    UIManager.setLookAndFeel(new FlatLightLaf());
+                    break;
+                case "Dark":
+                    UIManager.setLookAndFeel(new FlatDarkLaf());
+                    break;
+                case "IntelliJ":
+                default:
+                    UIManager.setLookAndFeel(new FlatIntelliJLaf());
+                    break;
+            }
+            
+            // Update all components if frame exists
+            if (frmDatabaseLockDemo != null) {
+                SwingUtilities.updateComponentTreeUI(frmDatabaseLockDemo);
+                frmDatabaseLockDemo.pack();
+            }
+            
+            // Save preference
+            Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
+            prefs.put("theme", themeName);
+            prefs.flush();
         } catch (Exception ex) {
-            System.err.println("Failed to initialize LaF");
+            System.err.println("Failed to apply theme: " + themeName);
+            ex.printStackTrace();
         }
+    }
+    
+    /**
+     * Create and configure the menu bar with File menu for script operations.
+     */
+    private void createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        
+        // File menu for left panel
+        JMenu fileMenuLeft = new JMenu("File (Left)");
+        fileMenuLeft.setMnemonic(KeyEvent.VK_F);
+        
+        JMenuItem newItemLeft = new JMenuItem("New");
+        newItemLeft.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, KeyEvent.CTRL_DOWN_MASK));
+        newItemLeft.addActionListener(e -> leftSqlPanel.newScript());
+        fileMenuLeft.add(newItemLeft);
+        
+        JMenuItem openItemLeft = new JMenuItem("Open...");
+        openItemLeft.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, KeyEvent.CTRL_DOWN_MASK));
+        openItemLeft.addActionListener(e -> leftSqlPanel.openScript());
+        fileMenuLeft.add(openItemLeft);
+        
+        JMenuItem saveItemLeft = new JMenuItem("Save");
+        saveItemLeft.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, KeyEvent.CTRL_DOWN_MASK));
+        saveItemLeft.addActionListener(e -> leftSqlPanel.saveScript());
+        fileMenuLeft.add(saveItemLeft);
+        
+        JMenuItem saveAsItemLeft = new JMenuItem("Save As...");
+        saveAsItemLeft.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK));
+        saveAsItemLeft.addActionListener(e -> leftSqlPanel.saveScriptAs());
+        fileMenuLeft.add(saveAsItemLeft);
+        
+        menuBar.add(fileMenuLeft);
+        
+        // File menu for right panel
+        JMenu fileMenuRight = new JMenu("File (Right)");
+        fileMenuRight.setMnemonic(KeyEvent.VK_R);
+        
+        JMenuItem newItemRight = new JMenuItem("New");
+        newItemRight.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, KeyEvent.CTRL_DOWN_MASK | KeyEvent.ALT_DOWN_MASK));
+        newItemRight.addActionListener(e -> rightSqlPanel.newScript());
+        fileMenuRight.add(newItemRight);
+        
+        JMenuItem openItemRight = new JMenuItem("Open...");
+        openItemRight.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, KeyEvent.CTRL_DOWN_MASK | KeyEvent.ALT_DOWN_MASK));
+        openItemRight.addActionListener(e -> rightSqlPanel.openScript());
+        fileMenuRight.add(openItemRight);
+        
+        JMenuItem saveItemRight = new JMenuItem("Save");
+        saveItemRight.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, KeyEvent.CTRL_DOWN_MASK | KeyEvent.ALT_DOWN_MASK));
+        saveItemRight.addActionListener(e -> rightSqlPanel.saveScript());
+        fileMenuRight.add(saveItemRight);
+        
+        JMenuItem saveAsItemRight = new JMenuItem("Save As...");
+        saveAsItemRight.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, KeyEvent.CTRL_DOWN_MASK | KeyEvent.ALT_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK));
+        saveAsItemRight.addActionListener(e -> rightSqlPanel.saveScriptAs());
+        fileMenuRight.add(saveAsItemRight);
+        
+        menuBar.add(fileMenuRight);
+        
+        // View menu for theme selection
+        JMenu viewMenu = new JMenu("View");
+        viewMenu.setMnemonic(KeyEvent.VK_V);
+        
+        JMenu themeMenu = new JMenu("Theme");
+        themeMenu.setMnemonic(KeyEvent.VK_T);
+        
+        ButtonGroup themeGroup = new ButtonGroup();
+        Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
+        String currentTheme = prefs.get("theme", "IntelliJ");
+        
+        JRadioButtonMenuItem lightTheme = new JRadioButtonMenuItem("Light");
+        lightTheme.setSelected("Light".equals(currentTheme));
+        lightTheme.addActionListener(e -> applyTheme("Light"));
+        themeGroup.add(lightTheme);
+        themeMenu.add(lightTheme);
+        
+        JRadioButtonMenuItem intellijTheme = new JRadioButtonMenuItem("IntelliJ");
+        intellijTheme.setSelected("IntelliJ".equals(currentTheme));
+        intellijTheme.addActionListener(e -> applyTheme("IntelliJ"));
+        themeGroup.add(intellijTheme);
+        themeMenu.add(intellijTheme);
+        
+        JRadioButtonMenuItem darkTheme = new JRadioButtonMenuItem("Dark");
+        darkTheme.setSelected("Dark".equals(currentTheme));
+        darkTheme.addActionListener(e -> applyTheme("Dark"));
+        themeGroup.add(darkTheme);
+        themeMenu.add(darkTheme);
+        
+        viewMenu.add(themeMenu);
+        menuBar.add(viewMenu);
+        
+        frmDatabaseLockDemo.setJMenuBar(menuBar);
     }
 
     public SqlPanel getLeftSqlPanel() {

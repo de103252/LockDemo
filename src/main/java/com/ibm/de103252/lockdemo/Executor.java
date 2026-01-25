@@ -30,9 +30,9 @@ public class Executor {
             + "               locate_in_string(CURRENT CLIENT_CORR_TOKEN, '.', 1, 5) + 1) from sysibm.sysdummyu";
     //@formatter:off
     private static final String getXidDerby =
-            "select " + Thread.currentThread().threadId() + " as rnd, xid" +
+            "select " + Thread.currentThread().getId() + " as rnd, xid" +
             "  from SYSCS_DIAG.TRANSACTION_TABLE" +
-            " where sql_text like 'select " + Thread.currentThread().threadId() + "%'";
+            " where sql_text like 'select " + Thread.currentThread().getId() + "%'";
     private static final String LOCK_SQL_DB2 = ""
             + "select ACQUIRED_TS"
             + ", CAST(LUWID AS CHAR(30)) LUWID"
@@ -567,5 +567,64 @@ public class Executor {
 
     protected void setTransactionId(String xid) {
         pcs.firePropertyChange("xid", this.xid, this.xid = xid);
+    }
+    
+    /**
+     * Shutdown the executor and clean up resources.
+     * Closes database connections and terminates the executor service.
+     */
+    public void shutdown() {
+        // Shutdown the executor service
+        ex.shutdown();
+        try {
+            // Wait for existing tasks to terminate
+            if (!ex.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                // Force shutdown if tasks don't complete in time
+                ex.shutdownNow();
+                // Wait a bit for tasks to respond to being cancelled
+                if (!ex.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                    System.err.println("Executor service did not terminate");
+                }
+            }
+        } catch (InterruptedException e) {
+            // Re-cancel if current thread also interrupted
+            ex.shutdownNow();
+            // Preserve interrupt status
+            Thread.currentThread().interrupt();
+        }
+        
+        // Close database connection
+        if (connection != null) {
+            try {
+                if (!connection.isClosed()) {
+                    // Rollback any pending transaction
+                    if (isInTransaction()) {
+                        connection.rollback();
+                    }
+                    connection.close();
+                    System.out.println("Database connection closed");
+                }
+            } catch (SQLException e) {
+                System.err.println("Error closing database connection: " + e.getMessage());
+            }
+        }
+        
+        // Close result set if open
+        if (resultSet != null) {
+            try {
+                resultSet.close();
+            } catch (SQLException e) {
+                System.err.println("Error closing result set: " + e.getMessage());
+            }
+        }
+        
+        // Close statement if open
+        if (stmt != null) {
+            try {
+                stmt.close();
+            } catch (SQLException e) {
+                System.err.println("Error closing statement: " + e.getMessage());
+            }
+        }
     }
 }
