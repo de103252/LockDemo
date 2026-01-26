@@ -26,6 +26,7 @@ import javax.swing.JPanel;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -38,6 +39,9 @@ import com.formdev.flatlaf.FlatIntelliJLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 
 public class LockDemo {
+    // Timing constants
+    private static final int LOCK_UPDATE_INTERVAL_MS = 250;
+    
     private JFrame frmDatabaseLockDemo;
     private SqlPanel leftSqlPanel;
     private SqlPanel rightSqlPanel;
@@ -100,7 +104,7 @@ public class LockDemo {
                 }
             }
             try {
-                Thread.sleep(250);
+                Thread.sleep(LOCK_UPDATE_INTERVAL_MS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
@@ -213,11 +217,12 @@ public class LockDemo {
                 lockDisplay.repaint();
             }
         });
-        splitPane.setRightComponent(scrollPane);
+        
         lockDisplay = new JTable();
         lockDisplay.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
         lockDisplay.setFillsViewportHeight(true);
         scrollPane.setViewportView(lockDisplay);
+        splitPane.setRightComponent(scrollPane);
         leftSqlPanel.getExecutor().addPropertyChangeListener(new PropertyChangeListener() {
             @Override
             public void propertyChange(PropertyChangeEvent evt) {

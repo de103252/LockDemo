@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 
 /**
@@ -17,10 +18,11 @@ import java.util.stream.Collectors;
 public class ScriptManager {
     private File currentFile;
     private String lastLoadedContent;
+    private static final String PREF_LAST_DIRECTORY = "lastDirectory";
     
     /**
      * Load a SQL script from a file.
-     * 
+     *
      * @param file The file to load
      * @return The content of the file
      * @throws IOException if the file cannot be read
@@ -33,12 +35,16 @@ public class ScriptManager {
         Path path = file.toPath();
         lastLoadedContent = Files.readString(path, StandardCharsets.UTF_8);
         currentFile = file;
+        
+        // Save the directory for next time
+        saveLastDirectory(file.getParentFile());
+        
         return lastLoadedContent;
     }
     
     /**
      * Save SQL script content to a file.
-     * 
+     *
      * @param file The file to save to
      * @param content The SQL content to save
      * @throws IOException if the file cannot be written
@@ -52,6 +58,9 @@ public class ScriptManager {
         Files.writeString(path, content, StandardCharsets.UTF_8);
         currentFile = file;
         lastLoadedContent = content;
+        
+        // Save the directory for next time
+        saveLastDirectory(file.getParentFile());
     }
     
     /**
@@ -211,7 +220,41 @@ public class ScriptManager {
      * 
      * @param file The file to check
      * @return true if the file has a SQL extension
+    
+    /**
+     * Save the last used directory to preferences.
      */
+    private void saveLastDirectory(File directory) {
+        if (directory != null && directory.isDirectory()) {
+            Preferences prefs = Preferences.userRoot().node(ScriptManager.class.getName());
+            prefs.put(PREF_LAST_DIRECTORY, directory.getAbsolutePath());
+            try {
+                prefs.flush();
+            } catch (Exception e) {
+                // Ignore preference save errors
+            }
+        }
+    }
+    
+    /**
+     * Get the last used directory from preferences.
+     * 
+     * @return The last used directory, or user's home directory if none saved
+     */
+    public File getLastDirectory() {
+        Preferences prefs = Preferences.userRoot().node(ScriptManager.class.getName());
+        String lastDir = prefs.get(PREF_LAST_DIRECTORY, System.getProperty("user.home"));
+        File dir = new File(lastDir);
+        
+        // Verify directory still exists
+        if (dir.exists() && dir.isDirectory()) {
+            return dir;
+        }
+        
+        // Fall back to user home if saved directory no longer exists
+        return new File(System.getProperty("user.home"));
+    }
+     
     public static boolean isSqlFile(File file) {
         if (file == null) {
             return false;
@@ -222,4 +265,3 @@ public class ScriptManager {
     }
 }
 
-// Made with Bob

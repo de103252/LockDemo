@@ -445,10 +445,11 @@ public class Executor {
                 setResultSet(null);
             }
             if (connection != null) {
-                if (commit)
+                if (commit) {
                     connection.commit();
-                else
+                } else {
                     connection.rollback();
+                }
             }
         } catch (SQLException e) {
             sqlException(e);
@@ -475,6 +476,7 @@ public class Executor {
             try {
                 stmt = connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
                 pcs.firePropertyChange("busy", this.busy, this.busy = true);
+                
                 if (stmt.execute()) {
                     setResultSet(stmt.getResultSet());
                 } else {

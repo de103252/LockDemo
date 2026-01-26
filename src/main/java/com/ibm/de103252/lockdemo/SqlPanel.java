@@ -44,6 +44,7 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 
 @SuppressWarnings("serial")
 public class SqlPanel extends JPanel {
+	private static final int AUTO_COMPLETION_DELAY_MS = 1000;
 	/**
 	 * @wbp.nonvisual location=85,473
 	 */
@@ -525,7 +526,7 @@ public class SqlPanel extends JPanel {
 		AutoCompletion ac = new AutoCompletion(provider);
 		ac.install(sql);
 		ac.setAutoActivationEnabled(true);
-		ac.setAutoActivationDelay(300);
+		ac.setAutoActivationDelay(AUTO_COMPLETION_DELAY_MS);
 	}
 
 	/**
