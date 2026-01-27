@@ -241,7 +241,7 @@ public class ScriptManager {
      * 
      * @return The last used directory, or user's home directory if none saved
      */
-    public File getLastDirectory() {
+    public static File getLastDirectory() {
         Preferences prefs = Preferences.userRoot().node(ScriptManager.class.getName());
         String lastDir = prefs.get(PREF_LAST_DIRECTORY, System.getProperty("user.home"));
         File dir = new File(lastDir);

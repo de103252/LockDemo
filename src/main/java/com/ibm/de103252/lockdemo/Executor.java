@@ -26,9 +26,9 @@ import java.util.stream.IntStream;
 import javax.swing.event.SwingPropertyChangeSupport;
 
 public class Executor {
-    private static final String getXidDb2 = "select 42, substr(CURRENT CLIENT_CORR_TOKEN,"
-            + "               locate_in_string(CURRENT CLIENT_CORR_TOKEN, '.', 1, 5) + 1) from sysibm.sysdummyu";
-    //@formatter:off
+	private static final String getXidDb2 = "select 42, substr(CURRENT CLIENT_CORR_TOKEN,"
+			+ "               locate_in_string(CURRENT CLIENT_CORR_TOKEN, '.', 1, 5) + 1) from sysibm.sysdummyu";
+	//@formatter:off
     private static final String getXidDerby =
             "select " + Thread.currentThread().getId() + " as rnd, xid" +
             "  from SYSCS_DIAG.TRANSACTION_TABLE" +
@@ -130,503 +130,524 @@ public class Executor {
             + "        , L.MODE DESC"
             + "";
     //@formatter:on
-    private static final List<Integer> NUMERIC_TYPES = Arrays.asList(DECIMAL, DOUBLE, FLOAT, INTEGER, SMALLINT, BIGINT);
-    private boolean busy;
-    private Connection connection;
-    private String dbProduct;
-    private final ExecutorService ex = Executors.newSingleThreadExecutor();
-    private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this);
-    private String result = "";
-    private ResultSet resultSet;
-    private boolean resultSetPositioned;
-    private PreparedStatement stmt;
-    private String url;
-    private String xid;
+	private static final List<Integer> NUMERIC_TYPES = Arrays.asList(DECIMAL, DOUBLE, FLOAT, INTEGER, SMALLINT, BIGINT);
+	private boolean busy;
+	private Connection connection;
+	private String dbProduct;
+	private final ExecutorService ex = Executors.newSingleThreadExecutor();
+	private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this);
+	private String result = "";
+	private ResultSet resultSet;
+	private boolean resultSetPositioned;
+	private PreparedStatement stmt;
+	private String url;
+	private String xid;
 
-    public static String getLocksSQL(String dbProduct) {
-        switch (dbProduct) {
-        case "Apache Derby":
-            return LOCK_SQL_DERBY;
-        case "DB2":
-            return LOCK_SQL_DB2;
-        default:
-            return null;
-        }
-    }
+	public static String getLocksSQL(String dbProduct) {
+		switch (dbProduct) {
+		case "Apache Derby":
+			return LOCK_SQL_DERBY;
+		case "DB2":
+			return LOCK_SQL_DB2;
+		default:
+			return null;
+		}
+	}
 
-    /**
-     * Return a string representation of the column value.
-     *
-     * @param rs
-     * @param i  Index of column
-     * @return A string representation, justified right or left depending on the
-     *         column type, and padded to the recommended display length.
-     */
-    private static String colToString(ResultSet rs, int i) {
-        try {
-            ResultSetMetaData rsmd = rs.getMetaData();
-            String align = NUMERIC_TYPES.contains(rsmd.getColumnType(i)) ? "" : "-";
-            int colWidth = Math.max(rsmd.getColumnDisplaySize(i), rsmd.getColumnLabel(i).length());
-            return String.format("%" + align + colWidth + "s", rs.getObject(i));
-        } catch (SQLException e) {
-            return e.toString();
-        }
-    }
+	/**
+	 * Return a string representation of the column value.
+	 *
+	 * @param rs
+	 * @param i  Index of column
+	 * @return A string representation, justified right or left depending on the
+	 *         column type, and padded to the recommended display length.
+	 */
+	private static String colToString(ResultSet rs, int i) {
+		try {
+			ResultSetMetaData rsmd = rs.getMetaData();
+			String align = NUMERIC_TYPES.contains(rsmd.getColumnType(i)) ? "" : "-";
+			int colWidth = Math.max(rsmd.getColumnDisplaySize(i), rsmd.getColumnLabel(i).length());
+			return String.format("%" + align + colWidth + "s", rs.getObject(i));
+		} catch (SQLException e) {
+			return e.toString();
+		}
+	}
 
-    /**
-     * Return a string representation of the column header.
-     *
-     * @param rs
-     * @param i      Index of column
-     * @param header Column header or column value?
-     * @return A string representation, justified right or left depending on the
-     *         column type, and padded to the recommended display length.
-     */
-    private static String headerToString(ResultSet rs, int i) {
-        try {
-            ResultSetMetaData rsmd = rs.getMetaData();
-            String align = NUMERIC_TYPES.contains(rsmd.getColumnType(i)) ? "" : "-";
-            int colWidth = Math.max(rsmd.getColumnDisplaySize(i), rsmd.getColumnLabel(i).length());
-            return String.format("%" + align + colWidth + "s", rsmd.getColumnLabel(i));
-        } catch (SQLException e) {
-            return e.toString();
-        }
-    }
+	/**
+	 * Return a string representation of the column header.
+	 *
+	 * @param rs
+	 * @param i      Index of column
+	 * @param header Column header or column value?
+	 * @return A string representation, justified right or left depending on the
+	 *         column type, and padded to the recommended display length.
+	 */
+	private static String headerToString(ResultSet rs, int i) {
+		try {
+			ResultSetMetaData rsmd = rs.getMetaData();
+			String align = NUMERIC_TYPES.contains(rsmd.getColumnType(i)) ? "" : "-";
+			int colWidth = Math.max(rsmd.getColumnDisplaySize(i), rsmd.getColumnLabel(i).length());
+			return String.format("%" + align + colWidth + "s", rsmd.getColumnLabel(i));
+		} catch (SQLException e) {
+			return e.toString();
+		}
+	}
 
-    /**
-     * Return a header row for a result set, that is, the column labels padded to
-     * the column display widths.
-     *
-     * @param rs
-     * @return
-     * @throws SQLException
-     */
-    private static String headerRow(ResultSet rs) throws SQLException {
-        return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount())
-                .mapToObj(i -> headerToString(rs, i))
-                .collect(Collectors.joining(" "))
-        + "\n";
-    }
+	/**
+	 * Return a header row for a result set, that is, the column labels padded to
+	 * the column display widths.
+	 *
+	 * @param rs
+	 * @return
+	 * @throws SQLException
+	 */
+	private static String headerRow(ResultSet rs) throws SQLException {
+		return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount()).mapToObj(i -> headerToString(rs, i))
+				.collect(Collectors.joining(" ")) + "\n";
+	}
 
-    /**
-     * Return a data row for a result set.
-     *
-     * @param rs
-     * @return
-     * @throws SQLException
-     */
-    private static String rowToString(ResultSet rs) throws SQLException {
-        return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount())
-                .mapToObj(i -> colToString(rs, i))
-                .collect(Collectors.joining(" "))
-        + "\n";
-    }
+	/**
+	 * Return a data row for a result set.
+	 *
+	 * @param rs
+	 * @return
+	 * @throws SQLException
+	 */
+	private static String rowToString(ResultSet rs) throws SQLException {
+		return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount()).mapToObj(i -> colToString(rs, i))
+				.collect(Collectors.joining(" ")) + "\n";
+	}
 
-    public void addPropertyChangeListener(PropertyChangeListener listener) {
-        pcs.addPropertyChangeListener(listener);
-    }
+	public void addPropertyChangeListener(PropertyChangeListener listener) {
+		pcs.addPropertyChangeListener(listener);
+	}
 
-    public void commit() {
-        ex.submit(() -> commit0());
-    }
+	public void commit() {
+		ex.submit(() -> commit0());
+	}
 
-    public void connect() {
-        ex.submit(() -> connect0(getUrl()));
-    }
+	public void connect() {
+		ex.submit(() -> connect0(getUrl()));
+	}
 
-    public void connect(String url) {
-        setUrl(url);
-        connect();
-    }
+	public void connect(String url) {
+		setUrl(url);
+		connect();
+	}
 
-    public void disconnect() {
-        try {
-            connection.close();
-            setConnection(null);
-        } catch (SQLException e) {
-            // If a tx is open, connection will not close. User must rollback first.
-            appendToResult(e);
-        }
-    }
+	public void disconnect() {
+		try {
+			connection.close();
+			setConnection(null);
+		} catch (SQLException e) {
+			// If a tx is open, connection will not close. User must rollback first.
+			appendToResult(e);
+		}
+	}
 
-    public void execute(String sql) {
-        ex.submit(() -> execute0(sql));
-    }
+	public void execute(String sql) {
+		ex.submit(() -> execute0(sql));
+	}
 
-    public Connection getConnection() {
-        return connection;
-    }
+	public Connection getConnection() {
+		return connection;
+	}
 
-    public String getCurrentXid() {
-        return xid;
-    }
+	public String getCurrentXid() {
+		return xid;
+	}
 
-    public IsolationLevel getIsolationLevel() {
-        try {
-            return IsolationLevel.valueOf(getConnection().getTransactionIsolation());
-        } catch (SQLException e) {
-            appendToResult(e);
-            return null;
-        }
-    }
+	public IsolationLevel getIsolationLevel() {
+		try {
+			return IsolationLevel.valueOf(getConnection().getTransactionIsolation());
+		} catch (SQLException e) {
+			appendToResult(e);
+			return null;
+		}
+	}
 
-    public String getLocks() {
-        String result = "";
-        if (getConnection() == null)
-            return "";
-        try {
-            try (PreparedStatement getLocks = getConnection().prepareStatement(getLockSQL())) {
-                ResultSet rs = getLocks.executeQuery();
-                result += headerRow(rs);
-                while (rs.next()) {
-                    result += rowToString(rs);
-                }
-            }
-        } catch (SQLException e) {
-            return "Unexpected error: " + e;
-        }
-        return result;
-    }
+	public String getLocks() {
+		String result = "";
+		if (getConnection() == null)
+			return "";
+		try {
+			try (PreparedStatement getLocks = getConnection().prepareStatement(getLockSQL(),
+					ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY, ResultSet.CLOSE_CURSORS_AT_COMMIT)) {
+				try (ResultSet rs = getLocks.executeQuery()) {
+					result += headerRow(rs);
+					while (rs.next()) {
+						result += rowToString(rs);
+					}
+				}
+			}
+			getConnection().commit();
+		} catch (SQLException e) {
+			return "Unexpected error: " + e;
+		}
+		return result;
+	}
 
-    public String getLockSQL() throws SQLException {
-        return getLocksSQL(getConnection().getMetaData().getDatabaseProductName());
-    }
+	public String getLockSQL() throws SQLException {
+		return getLocksSQL(getConnection().getMetaData().getDatabaseProductName());
+	}
 
-    public String getResult() {
-        return result;
-    }
+	public String getResult() {
+		return result;
+	}
 
-    public ResultSet getResultSet() {
-        return resultSet;
-    }
+	public ResultSet getResultSet() {
+		return resultSet;
+	}
 
-    public String getUrl() {
-        return url;
-    }
+	public String getUrl() {
+		return url;
+	}
 
-    public boolean isBusy() {
-        return busy;
-    }
+	public boolean isBusy() {
+		return busy;
+	}
 
-    public boolean isConnected() {
-        try {
-            return connection != null && !connection.isClosed();
-        } catch (SQLException e) {
-            sqlException(e);
-            return false;
-        }
-    }
+	public boolean isConnected() {
+		try {
+			return connection != null && !connection.isClosed();
+		} catch (SQLException e) {
+			sqlException(e);
+			return false;
+		}
+	}
 
-    public boolean isInTransaction() {
-        return xid != null;
-    }
+	public boolean isInTransaction() {
+		return xid != null;
+	}
 
-    public boolean isResultSetOpen() {
-        try {
-            return resultSet != null && !resultSet.isClosed();
-        } catch (SQLException e) {
-            return false;
-        }
-    }
+	public boolean isResultSetOpen() {
+		try {
+			return resultSet != null && !resultSet.isClosed();
+		} catch (SQLException e) {
+			return false;
+		}
+	}
 
-    public boolean isResultSetPositioned() {
-        return resultSetPositioned;
-    }
+	public boolean isResultSetPositioned() {
+		return resultSetPositioned;
+	}
 
-    public void next() {
-        ex.execute(() -> next0());
-    }
+	public void next() {
+		ex.execute(() -> next0());
+	}
 
-    public void removePropertyChangeListener(PropertyChangeListener listener) {
-        pcs.removePropertyChangeListener(listener);
-    }
+	public void removePropertyChangeListener(PropertyChangeListener listener) {
+		pcs.removePropertyChangeListener(listener);
+	}
 
-    public void rollback() {
-        ex.submit(() -> rollback0());
-    }
+	public void rollback() {
+		ex.submit(() -> rollback0());
+	}
 
-    public void setConnection(Connection connection) {
-        boolean wasConnected = getConnection() != null;
-        this.connection = connection;
-        pcs.firePropertyChange("connected", wasConnected, connection != null);
-    }
+	public void setConnection(Connection connection) {
+		boolean wasConnected = getConnection() != null;
+		this.connection = connection;
+		pcs.firePropertyChange("connected", wasConnected, connection != null);
+	}
 
-    public void setIsolationLevel(int isolationLevel) {
-        if (getConnection() != null) {
-            try {
-                if (getConnection().getTransactionIsolation() != isolationLevel) {
-                    getConnection().setTransactionIsolation(isolationLevel);
-                }
-            } catch (SQLException e) {
-                appendToResult(e);
-            }
-        }
-    }
+	public void setIsolationLevel(int isolationLevel) {
+		if (getConnection() != null) {
+			try {
+				if (getConnection().getTransactionIsolation() != isolationLevel) {
+					getConnection().setTransactionIsolation(isolationLevel);
+				}
+			} catch (SQLException e) {
+				appendToResult(e);
+			}
+		}
+	}
 
-    public void setResult(String result) {
-        if (!result.endsWith("\n")) {
-            result += "\n";
-        }
-        pcs.firePropertyChange("result", this.result, this.result = result);
-    }
+	public void setResult(String result) {
+		if (!result.endsWith("\n")) {
+			result += "\n";
+		}
+		pcs.firePropertyChange("result", this.result, this.result = result);
+	}
 
-    public void setResultSet(ResultSet resultSet) {
-        pcs.firePropertyChange("resultSet", this.resultSet, this.resultSet = resultSet);
-        resultSetPositioned = false;
-        if (getResultSet() != null) {
-            try {
-                appendToResult(headerRow(getResultSet()));
-            } catch (SQLException e) {
-                appendToResult(e);
-            }
-        }
-    }
+	public void setResultSet(ResultSet resultSet) {
+		pcs.firePropertyChange("resultSet", this.resultSet, this.resultSet = resultSet);
+		resultSetPositioned = false;
+		if (getResultSet() != null) {
+			try {
+				appendToResult(headerRow(getResultSet()));
+			} catch (SQLException e) {
+				appendToResult(e);
+			}
+		}
+	}
 
-    public void setUrl(String url) {
-        this.url = url;
-    }
+	public void setUrl(String url) {
+		this.url = url;
+	}
 
-    public void update() {
-        ex.submit(() -> update0());
-    }
+	public void update() {
+		ex.submit(() -> update0());
+	}
 
-    private void appendToResult(SQLException e) {
-        appendToResult("!!! Exception occurred: " + e);
-    }
+	private void appendToResult(SQLException e) {
+		appendToResult("!!! Exception occurred: " + e);
+	}
 
-    private void appendToResult(String row) {
-        if (!row.endsWith("\n")) {
-            row += "\n";
-        }
-        if (getResult() == null) {
-            setResult(row);
-        } else {
-            setResult(getResult() + row);
-        }
-    }
+	private void appendToResult(String row) {
+		if (!row.endsWith("\n")) {
+			row += "\n";
+		}
+		if (getResult() == null) {
+			setResult(row);
+		} else {
+			setResult(getResult() + row);
+		}
+	}
 
-    private void closeResultSet() {
-        try {
-            if (resultSet != null) {
-                resultSet.close();
-            }
-        } catch (SQLException ignored) {
-        } finally {
-            setResultSet(null);
-        }
-    }
+	private void closeResultSet() {
+		try {
+			if (resultSet != null) {
+				resultSet.close();
+			}
+		} catch (SQLException ignored) {
+		} finally {
+			setResultSet(null);
+		}
+	}
 
-    private void commit0() {
-        endTransaction(true);
-    }
+	private void commit0() {
+		endTransaction(true);
+	}
 
-    private void connect0(String url) {
-        try {
-            Connection conn = DriverManager.getConnection(url);
-            conn.setAutoCommit(false);
-            conn.setHoldability(ResultSet.CLOSE_CURSORS_AT_COMMIT);
-            setConnection(conn);
-            dbProduct = conn.getMetaData().getDatabaseProductName();
-            Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
-            prefs.put("url", url);
-        } catch (SQLException e) {
-            sqlException(e);
-        }
-    }
+	private void connect0(String url) {
+		try {
+			Connection conn = DriverManager.getConnection(url);
+			conn.setAutoCommit(false);
+			conn.setHoldability(ResultSet.CLOSE_CURSORS_AT_COMMIT);
+			setConnection(conn);
+			dbProduct = conn.getMetaData().getDatabaseProductName();
+			Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
+			prefs.put("url", url);
+		} catch (SQLException e) {
+			sqlException(e);
+		}
+	}
 
-    private void endTransaction(boolean commit) {
-        try {
-            if (stmt != null) {
-                stmt.close();
-                stmt = null;
-            }
-            if (resultSet != null) {
-                resultSet.close();
-                setResultSet(null);
-            }
-            if (connection != null) {
-                if (commit) {
-                    connection.commit();
-                } else {
-                    connection.rollback();
-                }
-            }
-        } catch (SQLException e) {
-            sqlException(e);
-        } finally {
-            setTransactionId(null);
-        }
-    }
+	private void endTransaction(boolean commit) {
+		try {
+			if (stmt != null) {
+				stmt.close();
+				stmt = null;
+			}
+			if (resultSet != null) {
+				resultSet.close();
+				setResultSet(null);
+			}
+			if (connection != null) {
+				if (commit) {
+					connection.commit();
+				} else {
+					connection.rollback();
+				}
+			}
+		} catch (SQLException e) {
+			sqlException(e);
+		} finally {
+			setTransactionId(null);
+		}
+	}
 
-    private void execute0(String sqls) {
-        List<String> statements = split(sqls);
-        for (String sql : statements) {
-            executeOne(sql);
-        }
-    }
+	private void execute0(String sqls) {
+		List<String> statements = split(sqls);
+		for (String sql : statements) {
+			if (!sql.matches("\\s*--.*")) {
+				executeOne(sql);
+			}
+		}
+	}
 
-    private void executeOne(String sql) {
-        appendToResult(String.format("--- %tT -----------------------", Calendar.getInstance()));
-        appendToResult(sql);
-        if (sql.matches("(?i)commit(\\s+work)?")) {
-            commit();
-        } else if (sql.matches("(?i)rollback(\\s+work)?")) {
-            rollback();
-        } else
-            try {
-                stmt = connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
-                pcs.firePropertyChange("busy", this.busy, this.busy = true);
-                
-                if (stmt.execute()) {
-                    setResultSet(stmt.getResultSet());
-                } else {
-                    int count = stmt.getUpdateCount();
-                    appendToResult(String.format("%d rows affected\n", count));
-                }
-                setTransactionId(retrieveCurrentXid());
-            } catch (SQLException e) {
-                sqlException(e);
-                rollback0();
-            } finally {
-                pcs.firePropertyChange("busy", this.busy, this.busy = false);
-            }
-    }
+	private void executeOne(String sql) {
+		appendToResult(String.format("--- %tT -----------------------", Calendar.getInstance()));
+		appendToResult(sql);
+		if (sql.matches("(?i)commit(\\s+work)?")) {
+			commit();
+		} else if (sql.matches("(?i)rollback(\\s+work)?")) {
+			rollback();
+		} else
+			try {
+				stmt = connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
+				pcs.firePropertyChange("busy", this.busy, this.busy = true);
 
-    private void next0() {
-        try {
-            pcs.firePropertyChange("busy", false, this.busy = true);
-            if (getResultSet() != null) {
-                if (getResultSet().next()) {
-                    appendToResult(rowToString(getResultSet()));
-                    resultSetPositioned = true;
-                } else {
-                    appendToResult("-- End of result set -----------------------");
-                    closeResultSet();
-                }
-            }
-        } catch (SQLException e) {
-            sqlException(e);
-        } finally {
-            pcs.firePropertyChange("busy", true, this.busy = false);
-        }
-    }
+				if (stmt.execute()) {
+					setResultSet(stmt.getResultSet());
+				} else {
+					int count = stmt.getUpdateCount();
+					appendToResult(String.format("%d rows affected\n", count));
+				}
+				setTransactionId(retrieveCurrentXid());
+			} catch (SQLException e) {
+				sqlException(e);
+				rollback0();
+			} finally {
+				pcs.firePropertyChange("busy", this.busy, this.busy = false);
+			}
+	}
 
-    /**
-     * Retrieve an identifier (XID) for the current transaction.
-     *
-     * @return A transaction identifier, or a dummy string if a transaction
-     *         identifier could not be retrieved.
-     * @throws SQLException
-     */
-    private String retrieveCurrentXid() {
-        String xidSQL;
-        switch (dbProduct) {
-        case "Apache Derby":
-            xidSQL = getXidDerby;
-            break;
-        case "DB2":
-            xidSQL = getXidDb2;
-            break;
-        default:
-            return "(no Xid)";
-        }
-        try (PreparedStatement ps = getConnection().prepareStatement(xidSQL)) {
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getString(2);
-            }
-        } catch (SQLException e) {
-            return "(no Xid)";
-        }
-    }
+	private void next0() {
+		try {
+			pcs.firePropertyChange("busy", false, this.busy = true);
+			if (getResultSet() != null) {
+				if (getResultSet().next()) {
+					appendToResult(rowToString(getResultSet()));
+					resultSetPositioned = true;
+				} else {
+					appendToResult("-- End of result set -----------------------");
+					closeResultSet();
+				}
+			}
+		} catch (SQLException e) {
+			sqlException(e);
+		} finally {
+			pcs.firePropertyChange("busy", true, this.busy = false);
+		}
+	}
 
-    private void rollback0() {
-        endTransaction(false);
-    }
+	/**
+	 * Retrieve an identifier (XID) for the current transaction.
+	 *
+	 * @return A transaction identifier, or a dummy string if a transaction
+	 *         identifier could not be retrieved.
+	 * @throws SQLException
+	 */
+	private String retrieveCurrentXid() {
+		String xidSQL;
+		switch (dbProduct) {
+		case "Apache Derby":
+			xidSQL = getXidDerby;
+			break;
+		case "DB2":
+			xidSQL = getXidDb2;
+			break;
+		default:
+			return "(no Xid)";
+		}
+		try (PreparedStatement ps = getConnection().prepareStatement(xidSQL)) {
+			try (ResultSet rs = ps.executeQuery()) {
+				rs.next();
+				return rs.getString(2);
+			}
+		} catch (SQLException e) {
+			return "(no Xid)";
+		}
+	}
 
-    private List<String> split(String sqls) {
-        return Arrays.asList(sqls.split(";"))
-                     .stream()
-                     .filter((s) -> !s.trim().isEmpty())
-                     .collect(Collectors.toList());
-    }
+	private void rollback0() {
+		endTransaction(false);
+	}
 
-    private void sqlException(SQLException e) {
-        appendToResult(e.toString() + "\n");
-    }
+	private List<String> split(String sqls) {
+		return Arrays.asList(sqls.split(";")).stream().filter((s) -> !s.trim().isEmpty()).collect(Collectors.toList());
+	}
 
-    private void update0() {
-        try {
-            pcs.firePropertyChange("busy", false, true);
-            getResultSet().updateObject(1, getResultSet().getObject(1));
-            getResultSet().updateRow();
-        } catch (SQLException e) {
-            appendToResult(e);
-        } finally {
-            pcs.firePropertyChange("busy", true, false);
-        }
-    }
+	private void sqlException(SQLException e) {
+		appendToResult(e.toString() + "\n");
+	}
 
-    protected void setTransactionId(String xid) {
-        pcs.firePropertyChange("xid", this.xid, this.xid = xid);
-    }
-    
-    /**
-     * Shutdown the executor and clean up resources.
-     * Closes database connections and terminates the executor service.
-     */
-    public void shutdown() {
-        // Shutdown the executor service
-        ex.shutdown();
-        try {
-            // Wait for existing tasks to terminate
-            if (!ex.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                // Force shutdown if tasks don't complete in time
-                ex.shutdownNow();
-                // Wait a bit for tasks to respond to being cancelled
-                if (!ex.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
-                    System.err.println("Executor service did not terminate");
-                }
-            }
-        } catch (InterruptedException e) {
-            // Re-cancel if current thread also interrupted
-            ex.shutdownNow();
-            // Preserve interrupt status
-            Thread.currentThread().interrupt();
-        }
-        
-        // Close database connection
-        if (connection != null) {
-            try {
-                if (!connection.isClosed()) {
-                    // Rollback any pending transaction
-                    if (isInTransaction()) {
-                        connection.rollback();
-                    }
-                    connection.close();
-                    System.out.println("Database connection closed");
-                }
-            } catch (SQLException e) {
-                System.err.println("Error closing database connection: " + e.getMessage());
-            }
-        }
-        
-        // Close result set if open
-        if (resultSet != null) {
-            try {
-                resultSet.close();
-            } catch (SQLException e) {
-                System.err.println("Error closing result set: " + e.getMessage());
-            }
-        }
-        
-        // Close statement if open
-        if (stmt != null) {
-            try {
-                stmt.close();
-            } catch (SQLException e) {
-                System.err.println("Error closing statement: " + e.getMessage());
-            }
-        }
-    }
+	private void update0() {
+		try {
+			pcs.firePropertyChange("busy", false, true);
+			ResultSetMetaData rsmd = getResultSet().getMetaData();
+			for (int col = 1; col < rsmd.getColumnCount(); col++) {
+				if (rsmd.isDefinitelyWritable(col) && !rsmd.isAutoIncrement(col)) {
+					getResultSet().updateObject(col, getResultSet().getObject(col));
+					getResultSet().updateRow();
+					break;
+				}
+			}
+		} catch (SQLException e) {
+			appendToResult(e);
+		} finally {
+			pcs.firePropertyChange("busy", true, false);
+		}
+	}
+
+	protected void setTransactionId(String xid) {
+		pcs.firePropertyChange("xid", this.xid, this.xid = xid);
+	}
+
+	/**
+	 * Shutdown the executor and clean up resources. Closes database connections and
+	 * terminates the executor service.
+	 */
+	public void shutdown() {
+		// Shutdown the executor service
+		ex.shutdown();
+		try {
+			// Wait for existing tasks to terminate
+			if (!ex.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+				// Force shutdown if tasks don't complete in time
+				ex.shutdownNow();
+				// Wait a bit for tasks to respond to being cancelled
+				if (!ex.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
+					System.err.println("Executor service did not terminate");
+				}
+			}
+		} catch (InterruptedException e) {
+			// Re-cancel if current thread also interrupted
+			ex.shutdownNow();
+			// Preserve interrupt status
+			Thread.currentThread().interrupt();
+		}
+
+		// Close database connection
+		if (connection != null) {
+			try {
+				if (!connection.isClosed()) {
+					// Rollback any pending transaction
+					if (isInTransaction()) {
+						connection.rollback();
+					}
+					connection.close();
+					System.out.println("Database connection closed");
+				}
+			} catch (SQLException e) {
+				System.err.println("Error closing database connection: " + e.getMessage());
+			}
+		}
+
+		// Close result set if open
+		if (resultSet != null) {
+			try {
+				resultSet.close();
+			} catch (SQLException e) {
+				System.err.println("Error closing result set: " + e.getMessage());
+			}
+		}
+
+		// Close statement if open
+		if (stmt != null) {
+			try {
+				stmt.close();
+			} catch (SQLException e) {
+				System.err.println("Error closing statement: " + e.getMessage());
+			}
+		}
+	}
+
+	public String[] getSQLKeywords() {
+		if (getConnection() != null) {
+			try {
+				return getConnection().getMetaData().getSQLKeywords().split(",");
+			} catch (SQLException e) {
+			}
+		}
+		return new String[] { "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE",
+				"CREATE", "TABLE", "ALTER", "DROP", "INDEX", "VIEW", "JOIN", "INNER", "LEFT", "RIGHT", "OUTER", "ON",
+				"AS", "AND", "OR", "NOT", "IN", "BETWEEN", "LIKE", "IS", "NULL", "ORDER", "BY", "GROUP", "HAVING",
+				"DISTINCT", "COUNT", "SUM", "AVG", "MIN", "MAX", "UNION", "ALL", "BEGIN", "COMMIT", "ROLLBACK",
+				"TRANSACTION", "WORK", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "UNIQUE", "CHECK", "DEFAULT", "INT",
+				"INTEGER", "VARCHAR", "CHAR", "DATE", "TIME", "TIMESTAMP", "DECIMAL", "NUMERIC", "FLOAT", "DOUBLE",
+				"BOOLEAN", "BLOB", "CLOB", "GRANT", "REVOKE", "WITH", "LOCK", "FOR", "SHARE", "NOWAIT" };
+
+	}
 }

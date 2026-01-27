@@ -1,7 +1,10 @@
 package com.ibm.de103252.lockdemo;
 
+import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.EventQueue;
+import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -17,8 +20,10 @@ import java.util.prefs.Preferences;
 
 import javax.sql.rowset.JdbcRowSet;
 import javax.sql.rowset.RowSetProvider;
+import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
@@ -26,7 +31,6 @@ import javax.swing.JPanel;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -51,6 +55,7 @@ public class LockDemo {
     private JTable lockDisplay;
     private JdbcRowSet lockRowSet;
     private volatile boolean running = true;
+    private LockStateRenderer lockRenderer;
 
     /**
      * Launch the application.
@@ -88,6 +93,7 @@ public class LockDemo {
 
     private static void startEmbeddedDerby() throws Exception {
         Class.forName("org.apache.derby.jdbc.EmbeddedDriver");
+        Class.forName("org.apache.derby.jdbc.ClientDriver");
     }
 
     private void initLockDisplay() throws SQLException {
@@ -99,6 +105,12 @@ public class LockDemo {
             if (lockRowSet != null) {
                 try {
                     lockRowSet.execute();
+                    // Analyze locks for conflict highlighting after each update
+                    if (lockRenderer != null && lockDisplay != null) {
+                        SwingUtilities.invokeLater(() -> {
+                            lockDisplay.repaint();
+                        });
+                    }
                 } catch (SQLException e) {
                     System.err.println("Error updating lock info: " + e.getMessage());
                 }
@@ -193,7 +205,6 @@ public class LockDemo {
         gbl_panel.rowWeights = new double[] { 1.0, Double.MIN_VALUE };
         panel.setLayout(gbl_panel);
         leftSqlPanel = new SqlPanel();
-        leftSqlPanel.setMnemonics(false);
         GridBagConstraints gbc_leftSqlPanel = new GridBagConstraints();
         gbc_leftSqlPanel.weighty = 70.0;
         gbc_leftSqlPanel.fill = GridBagConstraints.BOTH;
@@ -202,7 +213,6 @@ public class LockDemo {
         gbc_leftSqlPanel.gridy = 0;
         panel.add(leftSqlPanel, gbc_leftSqlPanel);
         rightSqlPanel = new SqlPanel();
-        rightSqlPanel.setMnemonics(true);
         GridBagConstraints gbc_rightSqlPanel = new GridBagConstraints();
         gbc_rightSqlPanel.weighty = 70.0;
         gbc_rightSqlPanel.fill = GridBagConstraints.BOTH;
@@ -218,11 +228,36 @@ public class LockDemo {
             }
         });
         
+        // Create a panel to hold the legend and lock display
+        JPanel lockPanel = new JPanel(new BorderLayout());
+        
+        if (false) {
+        // Create legend panel
+        JPanel legendPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        legendPanel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        
+        // Add legend items
+        legendPanel.add(createLegendItem("Conflict", LockStateRenderer.CONFLICT_COLOR));
+        legendPanel.add(createLegendItem("Exclusive", LockStateRenderer.EXCLUSIVE_COLOR));
+        legendPanel.add(createLegendItem("Shared", LockStateRenderer.SHARED_COLOR));
+        legendPanel.add(createLegendItem("Waiting", LockStateRenderer.WAITING_COLOR));
+        
+        lockPanel.add(legendPanel, BorderLayout.NORTH);
+        }
+        
         lockDisplay = new JTable();
         lockDisplay.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
         lockDisplay.setFillsViewportHeight(true);
+        lockDisplay.setFocusable(false);
+        
+        // Set up lock highlighting
+        lockRenderer = new LockStateRenderer();
+        lockDisplay.setDefaultRenderer(Object.class, lockRenderer);
+        
         scrollPane.setViewportView(lockDisplay);
-        splitPane.setRightComponent(scrollPane);
+        lockPanel.add(scrollPane, BorderLayout.CENTER);
+        
+        splitPane.setRightComponent(lockPanel);
         leftSqlPanel.getExecutor().addPropertyChangeListener(new PropertyChangeListener() {
             @Override
             public void propertyChange(PropertyChangeEvent evt) {
@@ -241,6 +276,7 @@ public class LockDemo {
                         getLockDisplay().setModel(new RowSetTableModel(lockRowSet));
                     } else {
                         lockRowSet.close();
+                        lockRowSet = null;
                     }
                 } catch (SQLException e) {
                     // TODO Auto-generated catch block
@@ -300,7 +336,8 @@ public class LockDemo {
         
         // File menu for left panel
         JMenu fileMenuLeft = new JMenu("File (Left)");
-        fileMenuLeft.setMnemonic(KeyEvent.VK_F);
+        fileMenuLeft.setMnemonic(KeyEvent.VK_L);
+        fileMenuLeft.setDisplayedMnemonicIndex(6);
         
         JMenuItem newItemLeft = new JMenuItem("New");
         newItemLeft.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N, KeyEvent.CTRL_DOWN_MASK));
@@ -410,5 +447,16 @@ public class LockDemo {
             width = Math.min(width, 300);
             columnModel.getColumn(column).setPreferredWidth(width);
         }
+    }
+    
+    /**
+     * Create a legend item showing a color and label.
+     */
+    private JLabel createLegendItem(String text, Color color) {
+        JLabel label = new JLabel("  " + text + "  ");
+        label.setOpaque(true);
+        label.setBackground(color);
+        label.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
+        return label;
     }
 }

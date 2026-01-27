@@ -67,11 +67,13 @@
 			<artifactId>derbytools</artifactId>
 			<version>[10.15,)</version>
 		</dependency>
+		
 		<dependency>
 			<groupId>com.formdev</groupId>
 			<artifactId>flatlaf</artifactId>
 			<version>3.5.4</version>
 		</dependency>
+		
 		<dependency>
 			<groupId>com.fifesoft</groupId>
 			<artifactId>rsyntaxtextarea</artifactId>
@@ -83,6 +85,12 @@
 			<groupId>com.fifesoft</groupId>
 			<artifactId>autocomplete</artifactId>
 			<version>3.3.3</version>
+			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.derby</groupId>
+			<artifactId>derbyclient</artifactId>
+			<version>[10.15,)</version>
 			<scope>compile</scope>
 		</dependency>
 	</dependencies>

@@ -16,6 +16,7 @@ import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
 
 import javax.swing.AbstractAction;
+import javax.swing.Action;
 import javax.swing.ActionMap;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.InputMap;
@@ -53,16 +54,16 @@ public class SqlPanel extends JPanel {
 	private RSyntaxTextArea sql;
 	private RTextScrollPane sqlScrollPane;
 	private JComboBox<String> urlComboBox;
-	private JButton connectButton;
 	private JLabel busy;
-	private JButton nextButton;
-	private JButton rollbackButton;
-	private JButton updateButton;
-	private JButton executeButton;
-	private JButton commitButton;
 	private JPanel isolationPanel;
 	private JLabel isolationLabel;
 	private JComboBox<IsolationLevel> isolationLevel;
+	private Action executeAction;
+	private AbstractAction nextAction;
+	private AbstractAction commitAction;
+	private AbstractAction updateAction;
+	private AbstractAction rollbackAction;
+	private AbstractAction connectAction;
 
 	public Executor getExecutor() {
 		return executor;
@@ -102,9 +103,16 @@ public class SqlPanel extends JPanel {
 		gbc_urlTextField.gridx = 0;
 		gbc_urlTextField.gridy = 0;
 		panel.add(urlComboBox, gbc_urlTextField);
-		connectButton = new JButton("Connect");
+		
+		connectAction = new AbstractAction("Connect") {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				connectOrDisconnect();
+			}
+		};
+		JButton connectButton = new JButton(connectAction);
 		connectButton.setToolTipText("Connect to the data source");
-		connectButton.setEnabled(false);
 		GridBagConstraints gbc_connectButton = new GridBagConstraints();
 		gbc_connectButton.anchor = GridBagConstraints.NORTHWEST;
 		gbc_connectButton.gridx = 1;
@@ -147,9 +155,6 @@ public class SqlPanel extends JPanel {
 		gbc_scrollPane_1.gridy = 3;
 		add(sqlScrollPane, gbc_scrollPane_1);
 
-		// Setup auto-completion
-		setupAutoCompletion();
-
 		// Add SQL formatting keyboard shortcut
 		setupSqlFormatting();
 		JScrollPane scrollPane = new JScrollPane();
@@ -174,34 +179,64 @@ public class SqlPanel extends JPanel {
 		gbc_buttonPanel.gridx = 0;
 		gbc_buttonPanel.gridy = 5;
 		add(buttonPanel, gbc_buttonPanel);
-		executeButton = new JButton("Execute");
+
+		executeAction = new AbstractAction("Execute") {
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				IsolationLevel selectedIsolation = (IsolationLevel) getIsolationLevel().getSelectedItem();
+				getExecutor().setIsolationLevel(selectedIsolation.getIsolation());
+				getExecutor().execute(getSelectedSQLStatement());
+				updateControls();
+			}
+		};
+		JButton executeButton = new JButton(executeAction);
 		executeButton.setToolTipText("Execute selected SQL statement");
-		executeButton.setEnabled(false);
-		executeButton.addActionListener(e -> {
-			IsolationLevel selectedIsolation = (IsolationLevel) getIsolationLevel().getSelectedItem();
-			getExecutor().setIsolationLevel(selectedIsolation.getIsolation());
-			getExecutor().execute(getSelectedSQLStatement());
-			updateControls();
-		});
 		buttonPanel.add(executeButton);
-		nextButton = new JButton("Next");
+
+		nextAction = new AbstractAction("Next") {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				executor.next();
+				updateControls();
+			}
+		};
+		JButton nextButton = new JButton(nextAction);
 		nextButton.setToolTipText("Move result set to next row");
-		nextButton.setEnabled(false);
 		buttonPanel.add(nextButton);
-		commitButton = new JButton("Commit");
+
+		commitAction = new AbstractAction("Commit") {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				executor.commit();
+			}
+		};
+		JButton commitButton = new JButton(commitAction);
 		commitButton.setToolTipText("Commit the current transaction");
-		commitButton.addActionListener(e -> executor.commit());
-		updateButton = new JButton("Update");
-		updateButton.setToolTipText("Update row that the current result set is positioned on");
-		updateButton.setEnabled(false);
-		buttonPanel.add(updateButton);
-		commitButton.setEnabled(executor.isInTransaction());
 		buttonPanel.add(commitButton);
-		rollbackButton = new JButton("Rollback");
+
+		updateAction = new AbstractAction("Update") {
+
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				updateAction.setEnabled(false);
+				getExecutor().update();
+			}
+		};
+		JButton updateButton = new JButton(updateAction);
+		updateButton.setToolTipText("Update row that the current result set is positioned on");
+		buttonPanel.add(updateButton);
+		
+		rollbackAction = new AbstractAction("Rollback") {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				getExecutor().rollback();
+			}
+		};
+		JButton rollbackButton = new JButton(rollbackAction);
 		rollbackButton.setToolTipText("Roll the current transaction back");
-		rollbackButton.addActionListener(e -> executor.rollback());
-		rollbackButton.setEnabled(executor.isInTransaction());
 		buttonPanel.add(rollbackButton);
+		
 		busy = new JLabel("Disconnected");
 		busy.setOpaque(true);
 		busy.setBackground(Color.LIGHT_GRAY);
@@ -212,10 +247,6 @@ public class SqlPanel extends JPanel {
 		gbc_busy.gridx = 0;
 		gbc_busy.gridy = 1;
 		add(busy, gbc_busy);
-		nextButton.addActionListener(e -> {
-			executor.next();
-			updateControls();
-		});
 		executor.addPropertyChangeListener(new PropertyChangeListener() {
 			@Override
 			public void propertyChange(PropertyChangeEvent evt) {
@@ -235,11 +266,7 @@ public class SqlPanel extends JPanel {
 						.setEnabled(SqlPanel.this.getExecutor().isConnected() && notBlank(getSelectedSQLStatement()));
 			}
 		});
-		updateButton.addActionListener(e -> {
-			updateButton.setEnabled(false);
-			getExecutor().update();
-		});
-		connectButton.addActionListener(e -> connectOrDisconnect());
+		
 		initControls();
 		updateControls();
 	}
@@ -249,6 +276,7 @@ public class SqlPanel extends JPanel {
 			getExecutor().disconnect();
 		} else {
 			getExecutor().connect(getUrlComboBox().getSelectedItem().toString());
+			setupAutoCompletion();
 		}
 	}
 
@@ -285,48 +313,49 @@ public class SqlPanel extends JPanel {
 			getUrlComboBox().setEnabled(false);
 			getBusy().setBackground(Color.RED);
 			getBusy().setText("Busy: " + getExecutor().getCurrentXid());
-			getNextButton().setEnabled(false);
-			getExecuteButton().setEnabled(false);
-			getCommitButton().setEnabled(false);
-			getRollbackButton().setEnabled(false);
-			getUpdateButton().setEnabled(false);
+			nextAction.setEnabled(false);
+			executeAction.setEnabled(false);
+			commitAction.setEnabled(false);
+			rollbackAction.setEnabled(false);
+			updateAction.setEnabled(false);
+			connectAction.setEnabled(false);
 			getIsolationLevel().setEnabled(false);
-			getConnectButton().setEnabled(false);
 		} else if (isInTransaction) {
 			getUrlComboBox().setEnabled(false);
 			getBusy().setBackground(Color.YELLOW);
 			getBusy().setText("In Tx: " + getExecutor().getCurrentXid());
-			getNextButton().setEnabled(getExecutor().isResultSetOpen());
-			getUpdateButton().setEnabled(getExecutor().isResultSetPositioned());
-			getExecuteButton().setEnabled(notBlank(getSelectedSQLStatement()));
-			getCommitButton().setEnabled(true);
-			getRollbackButton().setEnabled(true);
+			nextAction.setEnabled(getExecutor().isResultSetOpen());
+			updateAction.setEnabled(getExecutor().isResultSetPositioned());
+			executeAction.setEnabled(notBlank(getSelectedSQLStatement()));
+			commitAction.setEnabled(true);
+			rollbackAction.setEnabled(true);
 			getIsolationLevel().setEnabled(false);
-			getConnectButton().setEnabled(true);
+			connectAction.setEnabled(true);
 		} else if (isConnected) {
 			getUrlComboBox().setEnabled(false);
 			getBusy().setBackground(Color.GREEN);
 			getBusy().setText("Connected");
-			getCommitButton().setEnabled(false);
-			getRollbackButton().setEnabled(false);
-			getNextButton().setEnabled(false);
-			getUpdateButton().setEnabled(false);
-			getExecuteButton().setEnabled(notBlank(getSelectedSQLStatement()));
+			commitAction.setEnabled(false);
+			rollbackAction.setEnabled(false);
+			nextAction.setEnabled(false);
+			updateAction.setEnabled(false);
+			executeAction.setEnabled(notBlank(getSelectedSQLStatement()));
 			getIsolationLevel().setSelectedItem(getExecutor().getIsolationLevel());
 			getIsolationLevel().setEnabled(true);
-			getConnectButton().setText("Disconnect");
-			getConnectButton().setEnabled(true);
+			connectAction.putValue(Action.NAME, "Disconnect");
+			connectAction.setEnabled(true);
 		} else {
 			getUrlComboBox().setEnabled(true);
 			getBusy().setBackground(Color.GRAY);
 			getBusy().setText("Disconnected");
-			getCommitButton().setEnabled(false);
-			getRollbackButton().setEnabled(false);
-			getNextButton().setEnabled(false);
-			getExecuteButton().setEnabled(false);
+			commitAction.setEnabled(false);
+			rollbackAction.setEnabled(false);
+			nextAction.setEnabled(false);
+			executeAction.setEnabled(false);
+			updateAction.setEnabled(false);
 			getIsolationLevel().setEnabled(false);
-			getConnectButton().setText("Connect");
-			getConnectButton().setEnabled(notBlank(getUrlComboBox().getSelectedItem().toString()));
+			connectAction.putValue(Action.NAME, "Connect");
+			connectAction.setEnabled(notBlank(getUrlComboBox().getSelectedItem().toString()));
 		}
 	}
 
@@ -347,10 +376,6 @@ public class SqlPanel extends JPanel {
 		return sql;
 	}
 
-	public JButton getConnectButton() {
-		return connectButton;
-	}
-
 	public JComboBox<String> getUrlComboBox() {
 		return urlComboBox;
 	}
@@ -359,36 +384,8 @@ public class SqlPanel extends JPanel {
 		return busy;
 	}
 
-	protected JButton getNextButton() {
-		return nextButton;
-	}
-
-	protected JButton getRollbackButton() {
-		return rollbackButton;
-	}
-
-	protected JButton getUpdateButton() {
-		return updateButton;
-	}
-
-	protected JButton getExecuteButton() {
-		return executeButton;
-	}
-
-	protected JButton getCommitButton() {
-		return commitButton;
-	}
-
 	protected JComboBox<IsolationLevel> getIsolationLevel() {
 		return isolationLevel;
-	}
-
-	void setMnemonics(boolean right) {
-		getExecuteButton().setMnemonic(right ? '6' : '1');
-		getNextButton().setMnemonic(right ? '7' : '2');
-		getUpdateButton().setMnemonic(right ? '8' : '3');
-		getCommitButton().setMnemonic(right ? '9' : '4');
-		getRollbackButton().setMnemonic(right ? '0' : '5');
 	}
 
 	/**
@@ -427,8 +424,10 @@ public class SqlPanel extends JPanel {
 				String content = scriptManager.loadScript(selectedFile);
 				sql.setText(content);
 				sql.setCaretPosition(0);
-				JOptionPane.showMessageDialog(this, "Script loaded successfully: " + selectedFile.getName(), "Success",
-						JOptionPane.INFORMATION_MESSAGE);
+				if (false) {
+					JOptionPane.showMessageDialog(this, "Script loaded successfully: " + selectedFile.getName(),
+							"Success", JOptionPane.INFORMATION_MESSAGE);
+				}
 			} catch (IOException e) {
 				JOptionPane.showMessageDialog(this, "Error loading script: " + e.getMessage(), "Error",
 						JOptionPane.ERROR_MESSAGE);
@@ -536,20 +535,18 @@ public class SqlPanel extends JPanel {
 		DefaultCompletionProvider provider = new DefaultCompletionProvider();
 
 		// SQL Keywords
-		String[] keywords = { "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE",
-				"CREATE", "TABLE", "ALTER", "DROP", "INDEX", "VIEW", "JOIN", "INNER", "LEFT", "RIGHT", "OUTER", "ON",
-				"AS", "AND", "OR", "NOT", "IN", "BETWEEN", "LIKE", "IS", "NULL", "ORDER", "BY", "GROUP", "HAVING",
-				"DISTINCT", "COUNT", "SUM", "AVG", "MIN", "MAX", "UNION", "ALL", "BEGIN", "COMMIT", "ROLLBACK",
-				"TRANSACTION", "WORK", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "UNIQUE", "CHECK", "DEFAULT", "INT",
-				"INTEGER", "VARCHAR", "CHAR", "DATE", "TIME", "TIMESTAMP", "DECIMAL", "NUMERIC", "FLOAT", "DOUBLE",
-				"BOOLEAN", "BLOB", "CLOB", "GRANT", "REVOKE", "WITH", "LOCK", "FOR", "SHARE", "NOWAIT" };
+		String[] keywords = getSQLKeywords();
 
 		for (String keyword : keywords) {
-			provider.addCompletion(new BasicCompletion(provider, keyword));
+			// provider.addCompletion(new BasicCompletion(provider, keyword));
 			provider.addCompletion(new BasicCompletion(provider, keyword.toLowerCase()));
 		}
 
 		return provider;
+	}
+
+	private String[] getSQLKeywords() {
+		return getExecutor().getSQLKeywords();
 	}
 
 	/**
@@ -617,7 +614,7 @@ public class SqlPanel extends JPanel {
 		JFileChooser fileChooser = new JFileChooser();
 
 		// Set default directory to user's home directory
-		fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+		fileChooser.setCurrentDirectory(ScriptManager.getLastDirectory());
 
 		// Add file filter for SQL files
 		FileNameExtensionFilter filter = new FileNameExtensionFilter("SQL Scripts (*.sql, *.ddl, *.dml)",
