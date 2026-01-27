@@ -2,8 +2,7 @@
 -- und einmal in REPEATABLE READ oder SERIALIZABLE:
 select lastname, house
   from person
- where zipcode = 96190
-   and lastname = 'Rothe'
+ where id = 4711
    for read ONLY;
  
 -- Rechts ausführen und committen:
@@ -27,6 +26,7 @@ select *
 delete from person 
  where FIRSTNAME = 'Heinz' 
    and LASTNAME = 'Testmann'
+;   
 
 insert into person(FIRSTNAME, LASTNAME, DOB, ZIPCODE)
 values('Heinz', 'Testmann', '1950-01-01', 96190);
