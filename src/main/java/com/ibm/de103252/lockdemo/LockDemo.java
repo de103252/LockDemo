@@ -9,6 +9,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
@@ -20,6 +21,7 @@ import java.util.prefs.Preferences;
 
 import javax.sql.rowset.JdbcRowSet;
 import javax.sql.rowset.RowSetProvider;
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JFrame;
@@ -334,6 +336,15 @@ public class LockDemo {
     private void createMenuBar() {
         JMenuBar menuBar = new JMenuBar();
         
+        AbstractAction exitAction = new AbstractAction("Exit") {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				frmDatabaseLockDemo.setVisible(false);
+				frmDatabaseLockDemo.dispose();
+				System.exit(0);
+			}
+		};
+        
         // File menu for left panel
         JMenu fileMenuLeft = new JMenu("File (Left)");
         fileMenuLeft.setMnemonic(KeyEvent.VK_L);
@@ -358,6 +369,8 @@ public class LockDemo {
         saveAsItemLeft.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK));
         saveAsItemLeft.addActionListener(e -> leftSqlPanel.saveScriptAs());
         fileMenuLeft.add(saveAsItemLeft);
+        
+        fileMenuLeft.add(exitAction);
         
         menuBar.add(fileMenuLeft);
         
@@ -384,7 +397,9 @@ public class LockDemo {
         saveAsItemRight.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_S, KeyEvent.CTRL_DOWN_MASK | KeyEvent.ALT_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK));
         saveAsItemRight.addActionListener(e -> rightSqlPanel.saveScriptAs());
         fileMenuRight.add(saveAsItemRight);
-        
+
+        fileMenuRight.add(exitAction);
+
         menuBar.add(fileMenuRight);
         
         // View menu for theme selection
