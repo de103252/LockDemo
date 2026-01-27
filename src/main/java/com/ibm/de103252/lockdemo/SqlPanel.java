@@ -46,17 +46,16 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 @SuppressWarnings("serial")
 public class SqlPanel extends JPanel {
 	private static final int AUTO_COMPLETION_DELAY_MS = 1000;
+	private static boolean notBlank(String s) {
+		return s != null && s.trim().length() > 0;
+	}
 	/**
 	 * @wbp.nonvisual location=85,473
 	 */
 	private final Executor executor = new Executor();
 	private final ScriptManager scriptManager = new ScriptManager();
 	private RSyntaxTextArea sql;
-	private RTextScrollPane sqlScrollPane;
 	private JComboBox<String> urlComboBox;
-	private JLabel busy;
-	private JPanel isolationPanel;
-	private JLabel isolationLabel;
 	private JComboBox<IsolationLevel> isolationLevel;
 	private Action executeAction;
 	private AbstractAction nextAction;
@@ -65,14 +64,12 @@ public class SqlPanel extends JPanel {
 	private AbstractAction rollbackAction;
 	private AbstractAction connectAction;
 
-	public Executor getExecutor() {
-		return executor;
-	}
+	private JLabel busy;
 
 	/**
 	 * Create the panel.
 	 */
-	public SqlPanel() {
+	public SqlPanel(boolean left) {
 		GridBagLayout gridBagLayout = new GridBagLayout();
 		gridBagLayout.columnWidths = new int[] { 600, 0 };
 		gridBagLayout.rowHeights = new int[] { 0, 27, 7, 113, 33, 0, 0, 0 };
@@ -105,7 +102,6 @@ public class SqlPanel extends JPanel {
 		panel.add(urlComboBox, gbc_urlTextField);
 		
 		connectAction = new AbstractAction("Connect") {
-			
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				connectOrDisconnect();
@@ -118,14 +114,14 @@ public class SqlPanel extends JPanel {
 		gbc_connectButton.gridx = 1;
 		gbc_connectButton.gridy = 0;
 		panel.add(connectButton, gbc_connectButton);
-		isolationPanel = new JPanel();
+		JPanel isolationPanel = new JPanel();
 		GridBagConstraints gbc_isolationPanel = new GridBagConstraints();
 		gbc_isolationPanel.insets = new Insets(0, 0, 5, 0);
 		gbc_isolationPanel.fill = GridBagConstraints.BOTH;
 		gbc_isolationPanel.gridx = 0;
 		gbc_isolationPanel.gridy = 2;
 		add(isolationPanel, gbc_isolationPanel);
-		isolationLabel = new JLabel("Isolation");
+		JLabel isolationLabel = new JLabel("Isolation");
 		isolationLabel.setDisplayedMnemonic('I');
 		isolationPanel.add(isolationLabel);
 		isolationLevel = new JComboBox<IsolationLevel>();
@@ -137,14 +133,14 @@ public class SqlPanel extends JPanel {
 
 		// Create RSyntaxTextArea with SQL syntax highlighting
 		sql = new RSyntaxTextArea(20, 60);
-		sql.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_SQL);
-		sql.setCodeFoldingEnabled(true);
-		sql.setAntiAliasingEnabled(true);
-		sql.setToolTipText("Enter SQL text here");
-		sql.setFont(new Font("Consolas", Font.PLAIN, 13));
+		getSql().setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_SQL);
+		getSql().setCodeFoldingEnabled(true);
+		getSql().setAntiAliasingEnabled(true);
+		getSql().setToolTipText("Enter SQL text here");
+		getSql().setFont(new Font("Consolas", Font.PLAIN, 13));
 
 		// Create scroll pane with line numbers
-		sqlScrollPane = new RTextScrollPane(sql);
+		RTextScrollPane sqlScrollPane = new RTextScrollPane(getSql());
 		sqlScrollPane.setLineNumbersEnabled(true);
 
 		GridBagConstraints gbc_scrollPane_1 = new GridBagConstraints();
@@ -192,6 +188,7 @@ public class SqlPanel extends JPanel {
 		};
 		JButton executeButton = new JButton(executeAction);
 		executeButton.setToolTipText("Execute selected SQL statement");
+		executeButton.setMnemonic(left ? KeyEvent.VK_1 : KeyEvent.VK_6);
 		buttonPanel.add(executeButton);
 
 		nextAction = new AbstractAction("Next") {
@@ -203,6 +200,7 @@ public class SqlPanel extends JPanel {
 		};
 		JButton nextButton = new JButton(nextAction);
 		nextButton.setToolTipText("Move result set to next row");
+		nextButton.setMnemonic(left ? KeyEvent.VK_2 : KeyEvent.VK_7);
 		buttonPanel.add(nextButton);
 
 		commitAction = new AbstractAction("Commit") {
@@ -213,6 +211,7 @@ public class SqlPanel extends JPanel {
 		};
 		JButton commitButton = new JButton(commitAction);
 		commitButton.setToolTipText("Commit the current transaction");
+		commitButton.setMnemonic(left ? KeyEvent.VK_3 : KeyEvent.VK_8);
 		buttonPanel.add(commitButton);
 
 		updateAction = new AbstractAction("Update") {
@@ -225,6 +224,7 @@ public class SqlPanel extends JPanel {
 		};
 		JButton updateButton = new JButton(updateAction);
 		updateButton.setToolTipText("Update row that the current result set is positioned on");
+		updateButton.setMnemonic(left ? KeyEvent.VK_4 : KeyEvent.VK_9);
 		buttonPanel.add(updateButton);
 		
 		rollbackAction = new AbstractAction("Rollback") {
@@ -235,6 +235,7 @@ public class SqlPanel extends JPanel {
 		};
 		JButton rollbackButton = new JButton(rollbackAction);
 		rollbackButton.setToolTipText("Roll the current transaction back");
+		rollbackButton.setMnemonic(left ? KeyEvent.VK_5 : KeyEvent.VK_0);
 		buttonPanel.add(rollbackButton);
 		
 		busy = new JLabel("Disconnected");
@@ -259,11 +260,12 @@ public class SqlPanel extends JPanel {
 				updateControls();
 			}
 		});
-		sql.addCaretListener(new CaretListener() {
+		getSql().addCaretListener(new CaretListener() {
 			@Override
 			public void caretUpdate(CaretEvent e) {
-				executeButton
-						.setEnabled(SqlPanel.this.getExecutor().isConnected() && notBlank(getSelectedSQLStatement()));
+				executeAction.setEnabled(
+						SqlPanel.this.getExecutor().isConnected() 
+						&& notBlank(getSelectedSQLStatement()));
 			}
 		});
 		
@@ -278,6 +280,118 @@ public class SqlPanel extends JPanel {
 			getExecutor().connect(getUrlComboBox().getSelectedItem().toString());
 			setupAutoCompletion();
 		}
+	}
+
+	/**
+	 * Create completion provider with SQL keywords.
+	 */
+	private CompletionProvider createCompletionProvider() {
+		DefaultCompletionProvider provider = new DefaultCompletionProvider();
+
+		// SQL Keywords
+		String[] keywords = getSQLKeywords();
+
+		for (String keyword : keywords) {
+			// provider.addCompletion(new BasicCompletion(provider, keyword));
+			provider.addCompletion(new BasicCompletion(provider, keyword.toLowerCase()));
+		}
+
+		return provider;
+	}
+
+	/**
+	 * Create and configure a file chooser for SQL scripts.
+	 * 
+	 * @return Configured JFileChooser
+	 */
+	private JFileChooser createFileChooser() {
+		JFileChooser fileChooser = new JFileChooser();
+
+		// Set default directory to user's home directory
+		fileChooser.setCurrentDirectory(ScriptManager.getLastDirectory());
+
+		// Add file filter for SQL files
+		FileNameExtensionFilter filter = new FileNameExtensionFilter("SQL Scripts (*.sql, *.ddl, *.dml)",
+				ScriptManager.getSqlFileExtensions());
+		fileChooser.setFileFilter(filter);
+		fileChooser.setAcceptAllFileFilterUsed(true);
+
+		return fileChooser;
+	}
+
+	/**
+	 * Format SQL text with basic indentation.
+	 */
+	private void formatSQL() {
+		String text = getSql().getText();
+		if (text == null || text.trim().isEmpty()) {
+			return;
+		}
+
+		// Basic SQL formatting
+		String formatted = text
+				// Add newlines before major keywords
+				.replaceAll("(?i)\\s+(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|OUTER|ON|GROUP BY|ORDER BY|HAVING|UNION)",
+						"\n$1")
+				.replaceAll("(?i)\\s+(INSERT|INTO|VALUES|UPDATE|SET|DELETE)", "\n$1")
+				.replaceAll("(?i)\\s+(BEGIN|COMMIT|ROLLBACK)", "\n$1")
+				// Clean up multiple spaces
+				.replaceAll("\\s+", " ")
+				// Clean up multiple newlines
+				.replaceAll("\\n+", "\n")
+				// Trim each line
+				.replaceAll("(?m)^\\s+|\\s+$", "")
+				// Add indentation for certain keywords
+				.replaceAll("(?m)^(WHERE|AND|OR|ON|SET|VALUES)", "  $1").trim();
+
+		getSql().setText(formatted);
+		getSql().setCaretPosition(0);
+	}
+
+	public JLabel getBusy() {
+		return busy;
+	}
+
+	public Executor getExecutor() {
+		return executor;
+	}
+
+	protected JComboBox<IsolationLevel> getIsolationLevel() {
+		return isolationLevel;
+	}
+
+	/**
+	 * Get the ScriptManager instance.
+	 *
+	 * @return The script manager
+	 */
+	public ScriptManager getScriptManager() {
+		return scriptManager;
+	}
+
+	private String getSelectedSQLStatement() {
+		return getSql().getSelectedText();
+	}
+
+	private RSyntaxTextArea getSql() {
+		return sql;
+	}
+
+	private String[] getSQLKeywords() {
+		return getExecutor().getSQLKeywords();
+	}
+
+	/**
+	 * Get the SQL text area.
+	 * 
+	 * @return RSyntaxTextArea instance
+	 */
+	public RSyntaxTextArea getSqlTextArea() {
+		return getSql();
+	}
+
+	public JComboBox<String> getUrlComboBox() {
+		return urlComboBox;
 	}
 
 	private void initControls() {
@@ -298,6 +412,164 @@ public class SqlPanel extends JPanel {
 				cbm.addElement("jdbc:derby://localhost:1527/DBIDB");
 			}
 			getUrlComboBox().setModel(cbm);
+		}
+	}
+
+	/**
+	 * Create a new empty script.
+	 */
+	public void newScript() {
+		// Check if current content is modified
+		if (scriptManager.isModified(getSql().getText())) {
+			int result = JOptionPane.showConfirmDialog(this,
+					"Current script has unsaved changes. Do you want to save before creating a new file?",
+					"Unsaved Changes", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+
+			if (result == JOptionPane.YES_OPTION) {
+				saveScript();
+			} else if (result == JOptionPane.CANCEL_OPTION) {
+				return;
+			}
+		}
+
+		getSql().setText("");
+		scriptManager.clearCurrentFile();
+	}
+
+	/**
+	 * Open a SQL script file and load it into the editor.
+	 */
+	public void openScript() {
+		// Check if current content is modified
+		if (scriptManager.isModified(getSql().getText())) {
+			int result = JOptionPane.showConfirmDialog(this,
+					"Current script has unsaved changes. Do you want to save before opening a new file?",
+					"Unsaved Changes", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+
+			if (result == JOptionPane.YES_OPTION) {
+				saveScript();
+			} else if (result == JOptionPane.CANCEL_OPTION) {
+				return;
+			}
+		}
+
+		JFileChooser fileChooser = createFileChooser();
+		fileChooser.setDialogTitle("Open SQL Script");
+
+		int returnValue = fileChooser.showOpenDialog(this);
+		if (returnValue == JFileChooser.APPROVE_OPTION) {
+			File selectedFile = fileChooser.getSelectedFile();
+			try {
+				String content = scriptManager.loadScript(selectedFile);
+				getSql().setText(content);
+				getSql().setCaretPosition(0);
+				if (false) {
+					JOptionPane.showMessageDialog(this, "Script loaded successfully: " + selectedFile.getName(),
+							"Success", JOptionPane.INFORMATION_MESSAGE);
+				}
+			} catch (IOException e) {
+				JOptionPane.showMessageDialog(this, "Error loading script: " + e.getMessage(), "Error",
+						JOptionPane.ERROR_MESSAGE);
+			}
+		}
+	}
+
+	/**
+	 * Save the current SQL script to a file. If no file is currently open, prompts
+	 * for a file name.
+	 */
+	public void saveScript() {
+		if (scriptManager.getCurrentFile() == null) {
+			saveScriptAs();
+		} else {
+			try {
+				scriptManager.save(getSql().getText());
+				JOptionPane.showMessageDialog(this, "Script saved successfully: " + scriptManager.getCurrentFileName(),
+						"Success", JOptionPane.INFORMATION_MESSAGE);
+			} catch (IOException e) {
+				JOptionPane.showMessageDialog(this, "Error saving script: " + e.getMessage(), "Error",
+						JOptionPane.ERROR_MESSAGE);
+			}
+		}
+	}
+
+	/**
+	 * Save the current SQL script to a new file.
+	 */
+	public void saveScriptAs() {
+		JFileChooser fileChooser = createFileChooser();
+		fileChooser.setDialogTitle("Save SQL Script As");
+
+		// Suggest a default name if current file exists
+		if (scriptManager.getCurrentFile() != null) {
+			fileChooser.setSelectedFile(scriptManager.getCurrentFile());
+		}
+
+		int returnValue = fileChooser.showSaveDialog(this);
+		if (returnValue == JFileChooser.APPROVE_OPTION) {
+			File selectedFile = fileChooser.getSelectedFile();
+
+			// Add .sql extension if not present
+			if (!ScriptManager.isSqlFile(selectedFile)) {
+				selectedFile = new File(selectedFile.getAbsolutePath() + ".sql");
+			}
+
+			// Check if file exists
+			if (selectedFile.exists()) {
+				int overwrite = JOptionPane.showConfirmDialog(this, "File already exists. Do you want to overwrite it?",
+						"Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+
+				if (overwrite != JOptionPane.YES_OPTION) {
+					return;
+				}
+			}
+
+			try {
+				scriptManager.saveScript(selectedFile, getSql().getText());
+				JOptionPane.showMessageDialog(this, "Script saved successfully: " + selectedFile.getName(), "Success",
+						JOptionPane.INFORMATION_MESSAGE);
+			} catch (IOException e) {
+				JOptionPane.showMessageDialog(this, "Error saving script: " + e.getMessage(), "Error",
+						JOptionPane.ERROR_MESSAGE);
+			}
+		}
+	}
+
+	/**
+	 * Setup auto-completion for SQL keywords.
+	 */
+	private void setupAutoCompletion() {
+		CompletionProvider provider = createCompletionProvider();
+		AutoCompletion ac = new AutoCompletion(provider);
+		ac.install(getSql());
+		ac.setAutoActivationEnabled(true);
+		ac.setAutoActivationDelay(AUTO_COMPLETION_DELAY_MS);
+	}
+
+	/**
+	 * Setup SQL formatting keyboard shortcut (Ctrl+Shift+F).
+	 */
+	private void setupSqlFormatting() {
+		InputMap inputMap = getSql().getInputMap();
+		ActionMap actionMap = getSql().getActionMap();
+
+		KeyStroke formatKey = KeyStroke.getKeyStroke(KeyEvent.VK_F, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK);
+
+		inputMap.put(formatKey, "formatSQL");
+		actionMap.put("formatSQL", new AbstractAction() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				formatSQL();
+			}
+		});
+	}
+
+	/**
+	 * Shutdown the panel and clean up resources.
+	 */
+	public void shutdown() {
+		if (executor != null) {
+			executor.shutdown();
 		}
 	}
 
@@ -356,281 +628,6 @@ public class SqlPanel extends JPanel {
 			getIsolationLevel().setEnabled(false);
 			connectAction.putValue(Action.NAME, "Connect");
 			connectAction.setEnabled(notBlank(getUrlComboBox().getSelectedItem().toString()));
-		}
-	}
-
-	private String getSelectedSQLStatement() {
-		// Pattern p = Pattern.compile("('[^']*'|.)*;");
-		if (notBlank(getSql().getSelectedText())) {
-			return getSql().getSelectedText();
-		}
-		return getSql().getText();
-		// p.matcher(getSql().getText()).toMatchResult().
-	}
-
-	private static boolean notBlank(String s) {
-		return s != null && s.trim().length() > 0;
-	}
-
-	public JTextArea getSql() {
-		return sql;
-	}
-
-	public JComboBox<String> getUrlComboBox() {
-		return urlComboBox;
-	}
-
-	public JLabel getBusy() {
-		return busy;
-	}
-
-	protected JComboBox<IsolationLevel> getIsolationLevel() {
-		return isolationLevel;
-	}
-
-	/**
-	 * Get the ScriptManager instance.
-	 *
-	 * @return The script manager
-	 */
-	public ScriptManager getScriptManager() {
-		return scriptManager;
-	}
-
-	/**
-	 * Open a SQL script file and load it into the editor.
-	 */
-	public void openScript() {
-		// Check if current content is modified
-		if (scriptManager.isModified(sql.getText())) {
-			int result = JOptionPane.showConfirmDialog(this,
-					"Current script has unsaved changes. Do you want to save before opening a new file?",
-					"Unsaved Changes", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
-
-			if (result == JOptionPane.YES_OPTION) {
-				saveScript();
-			} else if (result == JOptionPane.CANCEL_OPTION) {
-				return;
-			}
-		}
-
-		JFileChooser fileChooser = createFileChooser();
-		fileChooser.setDialogTitle("Open SQL Script");
-
-		int returnValue = fileChooser.showOpenDialog(this);
-		if (returnValue == JFileChooser.APPROVE_OPTION) {
-			File selectedFile = fileChooser.getSelectedFile();
-			try {
-				String content = scriptManager.loadScript(selectedFile);
-				sql.setText(content);
-				sql.setCaretPosition(0);
-				if (false) {
-					JOptionPane.showMessageDialog(this, "Script loaded successfully: " + selectedFile.getName(),
-							"Success", JOptionPane.INFORMATION_MESSAGE);
-				}
-			} catch (IOException e) {
-				JOptionPane.showMessageDialog(this, "Error loading script: " + e.getMessage(), "Error",
-						JOptionPane.ERROR_MESSAGE);
-			}
-		}
-	}
-
-	/**
-	 * Save the current SQL script to a file. If no file is currently open, prompts
-	 * for a file name.
-	 */
-	public void saveScript() {
-		if (scriptManager.getCurrentFile() == null) {
-			saveScriptAs();
-		} else {
-			try {
-				scriptManager.save(sql.getText());
-				JOptionPane.showMessageDialog(this, "Script saved successfully: " + scriptManager.getCurrentFileName(),
-						"Success", JOptionPane.INFORMATION_MESSAGE);
-			} catch (IOException e) {
-				JOptionPane.showMessageDialog(this, "Error saving script: " + e.getMessage(), "Error",
-						JOptionPane.ERROR_MESSAGE);
-			}
-		}
-	}
-
-	/**
-	 * Save the current SQL script to a new file.
-	 */
-	public void saveScriptAs() {
-		JFileChooser fileChooser = createFileChooser();
-		fileChooser.setDialogTitle("Save SQL Script As");
-
-		// Suggest a default name if current file exists
-		if (scriptManager.getCurrentFile() != null) {
-			fileChooser.setSelectedFile(scriptManager.getCurrentFile());
-		}
-
-		int returnValue = fileChooser.showSaveDialog(this);
-		if (returnValue == JFileChooser.APPROVE_OPTION) {
-			File selectedFile = fileChooser.getSelectedFile();
-
-			// Add .sql extension if not present
-			if (!ScriptManager.isSqlFile(selectedFile)) {
-				selectedFile = new File(selectedFile.getAbsolutePath() + ".sql");
-			}
-
-			// Check if file exists
-			if (selectedFile.exists()) {
-				int overwrite = JOptionPane.showConfirmDialog(this, "File already exists. Do you want to overwrite it?",
-						"Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-
-				if (overwrite != JOptionPane.YES_OPTION) {
-					return;
-				}
-			}
-
-			try {
-				scriptManager.saveScript(selectedFile, sql.getText());
-				JOptionPane.showMessageDialog(this, "Script saved successfully: " + selectedFile.getName(), "Success",
-						JOptionPane.INFORMATION_MESSAGE);
-			} catch (IOException e) {
-				JOptionPane.showMessageDialog(this, "Error saving script: " + e.getMessage(), "Error",
-						JOptionPane.ERROR_MESSAGE);
-			}
-		}
-	}
-
-	/**
-	 * Create a new empty script.
-	 */
-	public void newScript() {
-		// Check if current content is modified
-		if (scriptManager.isModified(sql.getText())) {
-			int result = JOptionPane.showConfirmDialog(this,
-					"Current script has unsaved changes. Do you want to save before creating a new file?",
-					"Unsaved Changes", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
-
-			if (result == JOptionPane.YES_OPTION) {
-				saveScript();
-			} else if (result == JOptionPane.CANCEL_OPTION) {
-				return;
-			}
-		}
-
-		sql.setText("");
-		scriptManager.clearCurrentFile();
-	}
-
-	/**
-	 * Setup auto-completion for SQL keywords.
-	 */
-	private void setupAutoCompletion() {
-		CompletionProvider provider = createCompletionProvider();
-		AutoCompletion ac = new AutoCompletion(provider);
-		ac.install(sql);
-		ac.setAutoActivationEnabled(true);
-		ac.setAutoActivationDelay(AUTO_COMPLETION_DELAY_MS);
-	}
-
-	/**
-	 * Create completion provider with SQL keywords.
-	 */
-	private CompletionProvider createCompletionProvider() {
-		DefaultCompletionProvider provider = new DefaultCompletionProvider();
-
-		// SQL Keywords
-		String[] keywords = getSQLKeywords();
-
-		for (String keyword : keywords) {
-			// provider.addCompletion(new BasicCompletion(provider, keyword));
-			provider.addCompletion(new BasicCompletion(provider, keyword.toLowerCase()));
-		}
-
-		return provider;
-	}
-
-	private String[] getSQLKeywords() {
-		return getExecutor().getSQLKeywords();
-	}
-
-	/**
-	 * Setup SQL formatting keyboard shortcut (Ctrl+Shift+F).
-	 */
-	private void setupSqlFormatting() {
-		InputMap inputMap = sql.getInputMap();
-		ActionMap actionMap = sql.getActionMap();
-
-		KeyStroke formatKey = KeyStroke.getKeyStroke(KeyEvent.VK_F, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK);
-
-		inputMap.put(formatKey, "formatSQL");
-		actionMap.put("formatSQL", new AbstractAction() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				formatSQL();
-			}
-		});
-	}
-
-	/**
-	 * Format SQL text with basic indentation.
-	 */
-	private void formatSQL() {
-		String text = sql.getText();
-		if (text == null || text.trim().isEmpty()) {
-			return;
-		}
-
-		// Basic SQL formatting
-		String formatted = text
-				// Add newlines before major keywords
-				.replaceAll("(?i)\\s+(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|OUTER|ON|GROUP BY|ORDER BY|HAVING|UNION)",
-						"\n$1")
-				.replaceAll("(?i)\\s+(INSERT|INTO|VALUES|UPDATE|SET|DELETE)", "\n$1")
-				.replaceAll("(?i)\\s+(BEGIN|COMMIT|ROLLBACK)", "\n$1")
-				// Clean up multiple spaces
-				.replaceAll("\\s+", " ")
-				// Clean up multiple newlines
-				.replaceAll("\\n+", "\n")
-				// Trim each line
-				.replaceAll("(?m)^\\s+|\\s+$", "")
-				// Add indentation for certain keywords
-				.replaceAll("(?m)^(WHERE|AND|OR|ON|SET|VALUES)", "  $1").trim();
-
-		sql.setText(formatted);
-		sql.setCaretPosition(0);
-	}
-
-	/**
-	 * Get the SQL text area.
-	 * 
-	 * @return RSyntaxTextArea instance
-	 */
-	public RSyntaxTextArea getSqlTextArea() {
-		return sql;
-	}
-
-	/**
-	 * Create and configure a file chooser for SQL scripts.
-	 * 
-	 * @return Configured JFileChooser
-	 */
-	private JFileChooser createFileChooser() {
-		JFileChooser fileChooser = new JFileChooser();
-
-		// Set default directory to user's home directory
-		fileChooser.setCurrentDirectory(ScriptManager.getLastDirectory());
-
-		// Add file filter for SQL files
-		FileNameExtensionFilter filter = new FileNameExtensionFilter("SQL Scripts (*.sql, *.ddl, *.dml)",
-				ScriptManager.getSqlFileExtensions());
-		fileChooser.setFileFilter(filter);
-		fileChooser.setAcceptAllFileFilterUsed(true);
-
-		return fileChooser;
-	}
-
-	/**
-	 * Shutdown the panel and clean up resources.
-	 */
-	public void shutdown() {
-		if (executor != null) {
-			executor.shutdown();
 		}
 	}
 }

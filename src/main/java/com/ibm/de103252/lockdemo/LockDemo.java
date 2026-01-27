@@ -204,7 +204,7 @@ public class LockDemo {
         gbl_panel.columnWeights = new double[] { 1.0, 1.0, Double.MIN_VALUE };
         gbl_panel.rowWeights = new double[] { 1.0, Double.MIN_VALUE };
         panel.setLayout(gbl_panel);
-        leftSqlPanel = new SqlPanel();
+        leftSqlPanel = new SqlPanel(true);
         GridBagConstraints gbc_leftSqlPanel = new GridBagConstraints();
         gbc_leftSqlPanel.weighty = 70.0;
         gbc_leftSqlPanel.fill = GridBagConstraints.BOTH;
@@ -212,7 +212,7 @@ public class LockDemo {
         gbc_leftSqlPanel.gridx = 0;
         gbc_leftSqlPanel.gridy = 0;
         panel.add(leftSqlPanel, gbc_leftSqlPanel);
-        rightSqlPanel = new SqlPanel();
+        rightSqlPanel = new SqlPanel(false);
         GridBagConstraints gbc_rightSqlPanel = new GridBagConstraints();
         gbc_rightSqlPanel.weighty = 70.0;
         gbc_rightSqlPanel.fill = GridBagConstraints.BOTH;
