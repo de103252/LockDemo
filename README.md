@@ -72,9 +72,20 @@ For DB2 connections, ensure DB2 JDBC drivers are in the classpath.
 
 ## Documentation
 
+- **[User's Guide](USER_GUIDE.md)** - Comprehensive documentation covering all features
 - [Script Manager Guide](SCRIPT_MANAGER_GUIDE.md) - Detailed guide for the Script Manager feature
 
 ## Recent Changes
+
+### Version 0.0.1-SNAPSHOT (Latest)
+- **Lock Conflict Highlighting**: Color-coded lock display (red=conflict, orange=waiting, pink=exclusive, green=shared)
+- **Enhanced SQL Editor**: Syntax highlighting, line numbers, auto-completion (60+ keywords)
+- **SQL Formatting**: Format SQL with Ctrl+Shift+F
+- **Theme Support**: Light, IntelliJ, and Dark themes with persistence
+- **Improved Resource Management**: Proper cleanup of connections and threads
+- **Enhanced Wait Detection**: Better detection of waiting locks across databases
+
+### Version 0.0.1-SNAPSHOT (Previous)
 
 ### Version 0.0.1-SNAPSHOT
 - Added Script Manager functionality
