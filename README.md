@@ -13,16 +13,6 @@ The application is packaged with an Apache Derby runtime, which allows you to ru
 - **Multiple Isolation Levels**: Test different transaction isolation levels (Read Uncommitted, Read Committed, Repeatable Read, Serializable)
 - **Transaction Control**: Commit and rollback transactions independently on each connection
 
-### Script Manager (NEW)
-The application now includes a comprehensive Script Manager for saving and loading SQL scripts:
-
-- **Save/Load Scripts**: Save your SQL test scenarios and load them later
-- **Separate File Menus**: Independent script management for left and right panels
-- **Keyboard Shortcuts**: Quick access with Ctrl+N, Ctrl+O, Ctrl+S shortcuts
-- **Unsaved Changes Protection**: Prompts before losing unsaved work
-- **Smart SQL Parsing**: Handles multi-statement scripts with proper comment support
-
-For detailed information about the Script Manager, see [SCRIPT_MANAGER_GUIDE.md](SCRIPT_MANAGER_GUIDE.md).
 
 ## Quick Start
 
@@ -33,22 +23,22 @@ For detailed information about the Script Manager, see [SCRIPT_MANAGER_GUIDE.md]
 - `Ctrl+O` - Open script
 - `Ctrl+S` - Save script
 - `Ctrl+Shift+S` - Save script as
-- `1` - Execute SQL
-- `2` - Next row
-- `3` - Update row
-- `4` - Commit
-- `5` - Rollback
+- `Alt-1` - Execute SQL
+- `Alt-2` - Next row
+- `Alt-3` - Update row
+- `Alt-4` - Commit
+- `Alt-5` - Rollback
 
 #### Right Panel
 - `Ctrl+Alt+N` - New script
 - `Ctrl+Alt+O` - Open script
 - `Ctrl+Alt+S` - Save script
 - `Ctrl+Alt+Shift+S` - Save script as
-- `6` - Execute SQL
-- `7` - Next row
-- `8` - Update row
-- `9` - Commit
-- `0` - Rollback
+- `Alt-6` - Execute SQL
+- `Alt-7` - Next row
+- `Alt-8` - Update row
+- `Alt-9` - Commit
+- `Alt-0` - Rollback
 
 ## Supported Databases
 
