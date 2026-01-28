@@ -635,12 +635,6 @@ public class Executor {
 	}
 
 	public String[] getSQLKeywords() {
-		if (getConnection() != null) {
-			try {
-				return getConnection().getMetaData().getSQLKeywords().split(",");
-			} catch (SQLException e) {
-			}
-		}
 		return new String[] { "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE",
 				"CREATE", "TABLE", "ALTER", "DROP", "INDEX", "VIEW", "JOIN", "INNER", "LEFT", "RIGHT", "OUTER", "ON",
 				"AS", "AND", "OR", "NOT", "IN", "BETWEEN", "LIKE", "IS", "NULL", "ORDER", "BY", "GROUP", "HAVING",
