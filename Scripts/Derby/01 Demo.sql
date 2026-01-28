@@ -15,8 +15,10 @@ SELECT * FROM EMP FOR READ ONLY;
 -- Aggregatfunktionen, Joins
 SELECT avg(salary) FROM EMP;
 
-SELECT * FROM EMP
-NATURAL JOIN DEPT;
+-- Warum werden hier in Read Committed keine Row Locks gehalten?
+SELECT * 
+  FROM EMP
+  JOIN DEPT USING (did);
   
 -- Folgende SQLs links bzw. rechts eintippen und ausführen.
 -- Rechte bzw. linke Seite committen.
