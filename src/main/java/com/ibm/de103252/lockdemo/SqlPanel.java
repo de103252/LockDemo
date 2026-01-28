@@ -177,7 +177,6 @@ public class SqlPanel extends JPanel {
 		add(buttonPanel, gbc_buttonPanel);
 
 		executeAction = new AbstractAction("Execute") {
-
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				IsolationLevel selectedIsolation = (IsolationLevel) getIsolationLevel().getSelectedItem();
