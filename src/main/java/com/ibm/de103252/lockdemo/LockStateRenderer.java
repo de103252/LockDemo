@@ -2,9 +2,7 @@ package com.ibm.de103252.lockdemo;
 
 import java.awt.Color;
 import java.awt.Component;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 import javax.swing.JTable;
@@ -18,13 +16,13 @@ public class LockStateRenderer extends DefaultTableCellRenderer {
 	private static final long serialVersionUID = 1L;
 
 	// Color scheme for highlighting
-	static final Color CONFLICT_COLOR = new Color(255, 20, 20); // Light red for conflicts
-	static final Color WAITING_COLOR = new Color(255, 140, 0); // Light orange for waiting
-	static final Color INTENT_EXCLUSIVE_COLOR = new Color(255, 220, 220); // Pink for exclusive locks
-	static final Color EXCLUSIVE_COLOR = new Color(255, 20, 20); // Pink for exclusive locks
-	static final Color INTENT_SHARED_COLOR = new Color(220, 255, 220); // Light green for shared locks
-	static final Color SHARED_COLOR = new Color(20, 255, 20); // Light green for shared locks
-	static final Color UPDATE_COLOR = new Color(220, 220, 255); // Light green for shared locks
+	static final Color CONFLICT_COLOR = Color.RED;
+	static final Color WAITING_COLOR = Color.ORANGE;
+	static final Color EXCLUSIVE_COLOR = new Color(255, 100, 100);
+	static final Color INTENT_EXCLUSIVE_COLOR = new Color(255, 180, 180);
+	static final Color SHARED_COLOR = Color.GREEN;
+	static final Color INTENT_SHARED_COLOR = SHARED_COLOR.brighter();
+	static final Color UPDATE_COLOR = new Color(150, 150, 255);
 
 	private int xidColumn = -1;
 	private int modeColumn = -1;
@@ -46,24 +44,34 @@ public class LockStateRenderer extends DefaultTableCellRenderer {
 			return c;
 		}
 		findColumnIndices(table);
+		Set<String> resourcesWithWaiters = new HashSet<>();
+		for (int r = 0; r < table.getRowCount(); r++) {
+			if (getColumnValue(table, r, stateColumn).toUpperCase().equals("WAIT")) {
+				resourcesWithWaiters.add(getResourceKey(table, r));
+			}
+		}
 
 		String resource = getResourceKey(table, row);
 		String mode = getColumnValue(table, row, modeColumn).toUpperCase();
 		String state = getColumnValue(table, row, stateColumn).toUpperCase();
 		String status = getColumnValue(table, row, statusColumn).toUpperCase();
 
+		Color col;
 		if (state.equals("WAIT")) {
-			c.setBackground(WAITING_COLOR);
+			col = WAITING_COLOR;
+		} else if (resourcesWithWaiters.contains(resource)) {
+			col = CONFLICT_COLOR;
 		} else {
-			c.setBackground(switch (mode) {
+			col = switch (mode) {
 			case "IX" -> INTENT_EXCLUSIVE_COLOR;
 			case "X" -> EXCLUSIVE_COLOR;
 			case "IS" -> INTENT_SHARED_COLOR;
 			case "S" -> SHARED_COLOR;
 			case "U" -> UPDATE_COLOR;
 			default -> table.getBackground();
-			});
+			};
 		}
+		c.setBackground(col);
 		return c;
 	}
 
@@ -71,7 +79,8 @@ public class LockStateRenderer extends DefaultTableCellRenderer {
 	 * Find the indices of important columns.
 	 */
 	private void findColumnIndices(JTable table) {
-		if (columnIndicesInitialized) return;
+		if (columnIndicesInitialized)
+			return;
 		for (int i = 0; i < table.getColumnCount(); i++) {
 			String colName = table.getColumnName(i).toUpperCase();
 			if (colName.contains("XID") || colName.contains("LUWID")) {
@@ -82,7 +91,7 @@ public class LockStateRenderer extends DefaultTableCellRenderer {
 				stateColumn = i;
 			} else if (colName.equals("STATUS")) {
 				statusColumn = i;
-			} else if (colName.contains("TABLE") || colName.contains("OBJECT")) {
+			} else if (colName.contains("TABLENAME") || colName.contains("OBJECT")) {
 				tableColumn = i;
 			} else if (colName.contains("LOCKNAME") || colName.contains("RID") || colName.contains("PAGENUM")) {
 				locknameColumn = i;
