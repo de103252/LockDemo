@@ -41,14 +41,33 @@ import org.fife.ui.autocomplete.CompletionProvider;
 import org.fife.ui.autocomplete.DefaultCompletionProvider;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rsyntaxtextarea.folding.FoldParserManager;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 @SuppressWarnings("serial")
 public class SqlPanel extends JPanel {
+	
+	static {
+		FoldParserManager.get().addFoldParserMapping(SyntaxConstants.SYNTAX_STYLE_SQL, new SqlFoldParser(true));
+	}
+
+	private abstract class SqlAction extends AbstractAction {
+		public SqlAction(String name) {
+			super(name);
+		}
+
+		public void logAction(String message, Object... args) {
+			System.out.format(message, args);
+			System.out.println();
+		}
+	}
+
 	private static final int AUTO_COMPLETION_DELAY_MS = 1000;
+
 	private static boolean notBlank(String s) {
 		return s != null && s.trim().length() > 0;
 	}
+
 	/**
 	 * @wbp.nonvisual location=85,473
 	 */
@@ -63,7 +82,6 @@ public class SqlPanel extends JPanel {
 	private AbstractAction updateAction;
 	private AbstractAction rollbackAction;
 	private AbstractAction connectAction;
-
 	private JLabel busy;
 
 	/**
@@ -100,10 +118,12 @@ public class SqlPanel extends JPanel {
 		gbc_urlTextField.gridx = 0;
 		gbc_urlTextField.gridy = 0;
 		panel.add(urlComboBox, gbc_urlTextField);
-		
-		connectAction = new AbstractAction("Connect") {
+
+		connectAction = new SqlAction("Connect") {
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				logAction(getExecutor().isConnected() ? "Disconnect" : "Connect to %s",
+						getUrlComboBox().getSelectedItem().toString());
 				connectOrDisconnect();
 			}
 		};
@@ -142,6 +162,8 @@ public class SqlPanel extends JPanel {
 		// Create scroll pane with line numbers
 		RTextScrollPane sqlScrollPane = new RTextScrollPane(getSql());
 		sqlScrollPane.setLineNumbersEnabled(true);
+		sqlScrollPane.setFoldIndicatorEnabled(true);
+		// sqlScrollPane.setFoldIndicatorEnabled(true);
 
 		GridBagConstraints gbc_scrollPane_1 = new GridBagConstraints();
 		gbc_scrollPane_1.weighty = 30.0;
@@ -176,10 +198,13 @@ public class SqlPanel extends JPanel {
 		gbc_buttonPanel.gridy = 5;
 		add(buttonPanel, gbc_buttonPanel);
 
-		executeAction = new AbstractAction("Execute") {
+		executeAction = new SqlAction("Execute") {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				IsolationLevel selectedIsolation = (IsolationLevel) getIsolationLevel().getSelectedItem();
+				logAction("Run SQL statement in isolation level %s:%n%s", 
+						IsolationLevel.valueOf(selectedIsolation.getIsolation()),
+						getSelectedSQLStatement());
 				getExecutor().setIsolationLevel(selectedIsolation.getIsolation());
 				getExecutor().execute(getSelectedSQLStatement());
 				updateControls();
@@ -190,9 +215,10 @@ public class SqlPanel extends JPanel {
 		executeButton.setMnemonic(left ? KeyEvent.VK_1 : KeyEvent.VK_6);
 		buttonPanel.add(executeButton);
 
-		nextAction = new AbstractAction("Next") {
+		nextAction = new SqlAction("Next") {
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				logAction("Next");
 				executor.next();
 				updateControls();
 			}
@@ -202,9 +228,10 @@ public class SqlPanel extends JPanel {
 		nextButton.setMnemonic(left ? KeyEvent.VK_2 : KeyEvent.VK_7);
 		buttonPanel.add(nextButton);
 
-		commitAction = new AbstractAction("Commit") {
+		commitAction = new SqlAction("Commit") {
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				logAction("Commit");
 				executor.commit();
 			}
 		};
@@ -213,10 +240,11 @@ public class SqlPanel extends JPanel {
 		commitButton.setMnemonic(left ? KeyEvent.VK_3 : KeyEvent.VK_8);
 		buttonPanel.add(commitButton);
 
-		updateAction = new AbstractAction("Update") {
+		updateAction = new SqlAction("Update") {
 
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				logAction("Update current row");
 				updateAction.setEnabled(false);
 				getExecutor().update();
 			}
@@ -225,10 +253,11 @@ public class SqlPanel extends JPanel {
 		updateButton.setToolTipText("Update row that the current result set is positioned on");
 		updateButton.setMnemonic(left ? KeyEvent.VK_4 : KeyEvent.VK_9);
 		buttonPanel.add(updateButton);
-		
-		rollbackAction = new AbstractAction("Rollback") {
+
+		rollbackAction = new SqlAction("Rollback") {
 			@Override
 			public void actionPerformed(ActionEvent e) {
+				logAction("Rollback");
 				getExecutor().rollback();
 			}
 		};
@@ -236,7 +265,7 @@ public class SqlPanel extends JPanel {
 		rollbackButton.setToolTipText("Roll the current transaction back");
 		rollbackButton.setMnemonic(left ? KeyEvent.VK_5 : KeyEvent.VK_0);
 		buttonPanel.add(rollbackButton);
-		
+
 		busy = new JLabel("Disconnected");
 		busy.setOpaque(true);
 		busy.setBackground(Color.LIGHT_GRAY);
@@ -262,12 +291,11 @@ public class SqlPanel extends JPanel {
 		getSql().addCaretListener(new CaretListener() {
 			@Override
 			public void caretUpdate(CaretEvent e) {
-				executeAction.setEnabled(
-						SqlPanel.this.getExecutor().isConnected() 
-						&& notBlank(getSelectedSQLStatement()));
+				executeAction
+						.setEnabled(SqlPanel.this.getExecutor().isConnected() && notBlank(getSelectedSQLStatement()));
 			}
 		});
-		
+
 		initControls();
 		updateControls();
 	}
