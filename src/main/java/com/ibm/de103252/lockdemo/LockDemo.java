@@ -224,6 +224,10 @@ public class LockDemo {
 				lockDisplay.repaint();
 			}
 		});
+		
+		// Prevent vertical resizing beyond content size
+		scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+		scrollPane.setMinimumSize(new java.awt.Dimension(0, 100));
 
 		// Create a panel to hold the legend and lock display
 		JPanel lockPanel = new JPanel(new BorderLayout());
@@ -236,6 +240,20 @@ public class LockDemo {
 		lockDisplay.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 		lockDisplay.setFillsViewportHeight(true);
 		lockDisplay.setFocusable(false);
+		
+		// Prevent table from growing beyond its preferred size
+		lockDisplay.addPropertyChangeListener("model", evt -> {
+			// Update preferred size based on content
+			int rowHeight = lockDisplay.getRowHeight();
+			int rowCount = lockDisplay.getRowCount();
+			int headerHeight = lockDisplay.getTableHeader() != null ? lockDisplay.getTableHeader().getPreferredSize().height : 0;
+			int preferredHeight = (rowCount * rowHeight) + headerHeight;
+			
+			// Set maximum height to prevent excessive vertical growth
+			int maxHeight = Math.min(preferredHeight, 400);
+			scrollPane.setPreferredSize(new java.awt.Dimension(scrollPane.getPreferredSize().width, maxHeight));
+			scrollPane.revalidate();
+		});
 
 		// Set up lock highlighting
 		lockDisplay.setDefaultRenderer(Object.class, new LockStateRenderer());
