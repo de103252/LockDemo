@@ -306,6 +306,48 @@ public class SqlPanel extends JPanel {
 		} else {
 			getExecutor().connect(getUrlComboBox().getSelectedItem().toString());
 			setupAutoCompletion();
+			try {
+				updatePrefs();
+			} catch (BackingStoreException e) {
+			}
+		}
+	}
+
+	private void updatePrefs() throws BackingStoreException {
+		Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
+		String selectedUrl = getUrlComboBox().getSelectedItem().toString();
+		
+		// Store the most recently used URL
+		prefs.put("lastUsedUrl", selectedUrl);
+		
+		// Check if this URL already exists in the list
+		boolean urlExists = false;
+		for (String key : prefs.keys()) {
+			if (key.startsWith("url.")) {
+				String storedUrl = prefs.get(key, "");
+				if (storedUrl.equals(selectedUrl)) {
+					urlExists = true;
+					break;
+				}
+			}
+		}
+		
+		// If URL doesn't exist, add it to the list
+		if (!urlExists) {
+			int maxIndex = 0;
+			for (String key : prefs.keys()) {
+				if (key.startsWith("url.")) {
+					try {
+						int index = Integer.parseInt(key.substring(4));
+						if (index > maxIndex) {
+							maxIndex = index;
+						}
+					} catch (NumberFormatException e) {
+						// Ignore malformed keys
+					}
+				}
+			}
+			prefs.put("url." + (maxIndex + 1), selectedUrl);
 		}
 	}
 
@@ -425,7 +467,12 @@ public class SqlPanel extends JPanel {
 		if (true) {
 			Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
 			DefaultComboBoxModel<String> cbm = new DefaultComboBoxModel<>();
+			String lastUsedUrl = null;
 			try {
+				// Get the last used URL
+				lastUsedUrl = prefs.get("lastUsedUrl", null);
+				
+				// Load all saved URLs
 				for (String key : prefs.keys()) {
 					if (key.startsWith("url.")) {
 						cbm.addElement(prefs.get(key, ""));
@@ -439,6 +486,16 @@ public class SqlPanel extends JPanel {
 				cbm.addElement("jdbc:derby://localhost:1527/DBIDB");
 			}
 			getUrlComboBox().setModel(cbm);
+			
+			// Select the last used URL if it exists in the combo box
+			if (lastUsedUrl != null) {
+				for (int i = 0; i < cbm.getSize(); i++) {
+					if (lastUsedUrl.equals(cbm.getElementAt(i))) {
+						getUrlComboBox().setSelectedIndex(i);
+						break;
+					}
+				}
+			}
 		}
 	}
 
