@@ -81,7 +81,6 @@ public class LockDemo {
 			window.shutdown();
 		}));
 
-		startEmbeddedDerby();
 		EventQueue.invokeLater(new Runnable() {
 			@Override
 			public void run() {
