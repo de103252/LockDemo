@@ -435,6 +435,7 @@ public class Executor {
 
 	private void endTransaction(boolean commit) {
 		try {
+			pcs.firePropertyChange("busy", this.busy, this.busy = true);
 			if (stmt != null) {
 				stmt.close();
 				stmt = null;
@@ -453,6 +454,7 @@ public class Executor {
 		} catch (SQLException e) {
 			sqlException(e);
 		} finally {
+			pcs.firePropertyChange("busy", this.busy, this.busy = false);
 			setTransactionId(null);
 		}
 	}
