@@ -19,6 +19,8 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -130,30 +132,13 @@ public class Executor {
             + "        , L.MODE DESC"
             + "";
     //@formatter:on
+    
+    private final Logger LOGGER;
+	
 	private static final List<Integer> NUMERIC_TYPES = Arrays.asList(DECIMAL, DOUBLE, FLOAT, INTEGER, SMALLINT, BIGINT);
-	private boolean busy;
-	private Connection connection;
-	private String dbProduct;
-	private final ExecutorService ex = Executors.newSingleThreadExecutor();
-	private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this);
-	private String result = "";
-	private ResultSet resultSet;
-	private boolean resultSetPositioned;
-	private PreparedStatement stmt;
-	private String url;
-	private String xid;
-
-	public static String getLocksSQL(String dbProduct) {
-		switch (dbProduct) {
-		case "Apache Derby":
-			return LOCK_SQL_DERBY;
-		case "DB2":
-			return LOCK_SQL_DB2;
-		default:
-			return null;
-		}
+	public Executor(boolean left) {
+		LOGGER = Logger.getLogger(left ? "L" : "R");
 	}
-
 	/**
 	 * Return a string representation of the column value.
 	 *
@@ -172,7 +157,28 @@ public class Executor {
 			return e.toString();
 		}
 	}
-
+	public static String getLocksSQL(String dbProduct) {
+		switch (dbProduct) {
+		case "Apache Derby":
+			return LOCK_SQL_DERBY;
+		case "DB2":
+			return LOCK_SQL_DB2;
+		default:
+			return null;
+		}
+	}
+	/**
+	 * Return a header row for a result set, that is, the column labels padded to
+	 * the column display widths.
+	 *
+	 * @param rs
+	 * @return
+	 * @throws SQLException
+	 */
+	private static String headerRow(ResultSet rs) throws SQLException {
+		return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount()).mapToObj(i -> headerToString(rs, i))
+				.collect(Collectors.joining(" ")) + "\n";
+	}
 	/**
 	 * Return a string representation of the column header.
 	 *
@@ -192,20 +198,6 @@ public class Executor {
 			return e.toString();
 		}
 	}
-
-	/**
-	 * Return a header row for a result set, that is, the column labels padded to
-	 * the column display widths.
-	 *
-	 * @param rs
-	 * @return
-	 * @throws SQLException
-	 */
-	private static String headerRow(ResultSet rs) throws SQLException {
-		return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount()).mapToObj(i -> headerToString(rs, i))
-				.collect(Collectors.joining(" ")) + "\n";
-	}
-
 	/**
 	 * Return a data row for a result set.
 	 *
@@ -217,13 +209,60 @@ public class Executor {
 		return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount()).mapToObj(i -> colToString(rs, i))
 				.collect(Collectors.joining(" ")) + "\n";
 	}
+	private boolean busy;
+	private Connection connection;
+	private String dbProduct;
+	private final ExecutorService ex = Executors.newSingleThreadExecutor();
+	private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this);
+
+	private String result = "";
+
+	private ResultSet resultSet;
+
+	private boolean resultSetPositioned;
+
+	private PreparedStatement stmt;
+
+	private String url;
+
+	private String xid;
 
 	public void addPropertyChangeListener(PropertyChangeListener listener) {
 		pcs.addPropertyChangeListener(listener);
 	}
 
+	private void appendToResult(SQLException e) {
+		appendToResult("!!! Exception occurred: " + e);
+	}
+
+	private void appendToResult(String row) {
+		if (!row.endsWith("\n")) {
+			row += "\n";
+		}
+		if (getResult() == null) {
+			setResult(row);
+		} else {
+			setResult(getResult() + row);
+		}
+	}
+
+	private void closeResultSet() {
+		try {
+			if (resultSet != null) {
+				resultSet.close();
+			}
+		} catch (SQLException ignored) {
+		} finally {
+			setResultSet(null);
+		}
+	}
+
 	public void commit() {
 		ex.submit(() -> commit0());
+	}
+
+	private void commit0() {
+		endTransaction(true);
 	}
 
 	public void connect() {
@@ -233,6 +272,20 @@ public class Executor {
 	public void connect(String url) {
 		setUrl(url);
 		connect();
+	}
+
+	private void connect0(String url) {
+		try {
+			Connection conn = DriverManager.getConnection(url);
+			conn.setAutoCommit(false);
+			conn.setHoldability(ResultSet.CLOSE_CURSORS_AT_COMMIT);
+			setConnection(conn);
+			dbProduct = conn.getMetaData().getDatabaseProductName();
+			Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
+			prefs.put("url", url);
+		} catch (SQLException e) {
+			sqlException(e);
+		}
 	}
 
 	public void disconnect() {
@@ -245,8 +298,70 @@ public class Executor {
 		}
 	}
 
+	private void endTransaction(boolean commit) {
+		try {
+			pcs.firePropertyChange("busy", this.busy, this.busy = true);
+			if (stmt != null) {
+				stmt.close();
+				stmt = null;
+			}
+			if (resultSet != null) {
+				resultSet.close();
+				setResultSet(null);
+			}
+			if (connection != null) {
+				if (commit) {
+					connection.commit();
+				} else {
+					connection.rollback();
+				}
+			}
+		} catch (SQLException e) {
+			sqlException(e);
+		} finally {
+			pcs.firePropertyChange("busy", this.busy, this.busy = false);
+			setTransactionId(null);
+		}
+	}
+
 	public void execute(String sql) {
 		ex.submit(() -> execute0(sql));
+	}
+
+	private void execute0(String sqls) {
+		List<String> statements = split(sqls);
+		for (String sql : statements) {
+			if (!sql.matches("\\s*--.*")) {
+				executeOne(sql);
+			}
+		}
+	}
+
+	private void executeOne(String sql) {
+		appendToResult(String.format("--- %tT -----------------------", Calendar.getInstance()));
+		appendToResult(sql);
+		if (sql.matches("(?i)commit(\\s+work)?")) {
+			commit();
+		} else if (sql.matches("(?i)rollback(\\s+work)?")) {
+			rollback();
+		} else
+			try {
+				stmt = connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
+				pcs.firePropertyChange("busy", this.busy, this.busy = true);
+
+				if (stmt.execute()) {
+					setResultSet(stmt.getResultSet());
+				} else {
+					int count = stmt.getUpdateCount();
+					appendToResult(String.format("%d rows affected\n", count));
+				}
+				setTransactionId(retrieveCurrentXid());
+			} catch (SQLException e) {
+				sqlException(e);
+				rollback0();
+			} finally {
+				pcs.firePropertyChange("busy", this.busy, this.busy = false);
+			}
 	}
 
 	public Connection getConnection() {
@@ -299,6 +414,17 @@ public class Executor {
 		return resultSet;
 	}
 
+	public String[] getSQLKeywords() {
+		return new String[] { "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE",
+				"CREATE", "TABLE", "ALTER", "DROP", "INDEX", "VIEW", "JOIN", "INNER", "LEFT", "RIGHT", "OUTER", "ON",
+				"AS", "AND", "OR", "NOT", "IN", "BETWEEN", "LIKE", "IS", "NULL", "ORDER", "BY", "GROUP", "HAVING",
+				"DISTINCT", "COUNT", "SUM", "AVG", "MIN", "MAX", "UNION", "ALL", "BEGIN", "COMMIT", "ROLLBACK",
+				"TRANSACTION", "WORK", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "UNIQUE", "CHECK", "DEFAULT", "INT",
+				"INTEGER", "VARCHAR", "CHAR", "DATE", "TIME", "TIMESTAMP", "DECIMAL", "NUMERIC", "FLOAT", "DOUBLE",
+				"BOOLEAN", "BLOB", "CLOB", "GRANT", "REVOKE", "WITH", "LOCK", "FOR", "SHARE", "NOWAIT" };
+
+	}
+
 	public String getUrl() {
 		return url;
 	}
@@ -336,12 +462,64 @@ public class Executor {
 		ex.execute(() -> next0());
 	}
 
+	private void next0() {
+		try {
+			pcs.firePropertyChange("busy", false, this.busy = true);
+			if (getResultSet() != null) {
+				if (getResultSet().next()) {
+					appendToResult(rowToString(getResultSet()));
+					resultSetPositioned = true;
+				} else {
+					appendToResult("-- End of result set -----------------------");
+					closeResultSet();
+				}
+			}
+		} catch (SQLException e) {
+			sqlException(e);
+		} finally {
+			pcs.firePropertyChange("busy", true, this.busy = false);
+		}
+	}
+
 	public void removePropertyChangeListener(PropertyChangeListener listener) {
 		pcs.removePropertyChangeListener(listener);
 	}
 
+	/**
+	 * Retrieve an identifier (XID) for the current transaction.
+	 *
+	 * @return A transaction identifier, or a dummy string if a transaction
+	 *         identifier could not be retrieved.
+	 * @throws SQLException
+	 */
+	private String retrieveCurrentXid() {
+		String xidSQL;
+		switch (dbProduct) {
+		case "Apache Derby":
+			xidSQL = getXidDerby;
+			break;
+		case "DB2":
+			xidSQL = getXidDb2;
+			break;
+		default:
+			return "(no Xid)";
+		}
+		try (PreparedStatement ps = getConnection().prepareStatement(xidSQL)) {
+			try (ResultSet rs = ps.executeQuery()) {
+				rs.next();
+				return rs.getString(2);
+			}
+		} catch (SQLException e) {
+			return "(no Xid)";
+		}
+	}
+
 	public void rollback() {
 		ex.submit(() -> rollback0());
+	}
+
+	private void rollback0() {
+		endTransaction(false);
 	}
 
 	public void setConnection(Connection connection) {
@@ -381,200 +559,12 @@ public class Executor {
 		}
 	}
 
-	public void setUrl(String url) {
-		this.url = url;
-	}
-
-	public void update() {
-		ex.submit(() -> update0());
-	}
-
-	private void appendToResult(SQLException e) {
-		appendToResult("!!! Exception occurred: " + e);
-	}
-
-	private void appendToResult(String row) {
-		if (!row.endsWith("\n")) {
-			row += "\n";
-		}
-		if (getResult() == null) {
-			setResult(row);
-		} else {
-			setResult(getResult() + row);
-		}
-	}
-
-	private void closeResultSet() {
-		try {
-			if (resultSet != null) {
-				resultSet.close();
-			}
-		} catch (SQLException ignored) {
-		} finally {
-			setResultSet(null);
-		}
-	}
-
-	private void commit0() {
-		endTransaction(true);
-	}
-
-	private void connect0(String url) {
-		try {
-			Connection conn = DriverManager.getConnection(url);
-			conn.setAutoCommit(false);
-			conn.setHoldability(ResultSet.CLOSE_CURSORS_AT_COMMIT);
-			setConnection(conn);
-			dbProduct = conn.getMetaData().getDatabaseProductName();
-			Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
-			prefs.put("url", url);
-		} catch (SQLException e) {
-			sqlException(e);
-		}
-	}
-
-	private void endTransaction(boolean commit) {
-		try {
-			pcs.firePropertyChange("busy", this.busy, this.busy = true);
-			if (stmt != null) {
-				stmt.close();
-				stmt = null;
-			}
-			if (resultSet != null) {
-				resultSet.close();
-				setResultSet(null);
-			}
-			if (connection != null) {
-				if (commit) {
-					connection.commit();
-				} else {
-					connection.rollback();
-				}
-			}
-		} catch (SQLException e) {
-			sqlException(e);
-		} finally {
-			pcs.firePropertyChange("busy", this.busy, this.busy = false);
-			setTransactionId(null);
-		}
-	}
-
-	private void execute0(String sqls) {
-		List<String> statements = split(sqls);
-		for (String sql : statements) {
-			if (!sql.matches("\\s*--.*")) {
-				executeOne(sql);
-			}
-		}
-	}
-
-	private void executeOne(String sql) {
-		appendToResult(String.format("--- %tT -----------------------", Calendar.getInstance()));
-		appendToResult(sql);
-		if (sql.matches("(?i)commit(\\s+work)?")) {
-			commit();
-		} else if (sql.matches("(?i)rollback(\\s+work)?")) {
-			rollback();
-		} else
-			try {
-				stmt = connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
-				pcs.firePropertyChange("busy", this.busy, this.busy = true);
-
-				if (stmt.execute()) {
-					setResultSet(stmt.getResultSet());
-				} else {
-					int count = stmt.getUpdateCount();
-					appendToResult(String.format("%d rows affected\n", count));
-				}
-				setTransactionId(retrieveCurrentXid());
-			} catch (SQLException e) {
-				sqlException(e);
-				rollback0();
-			} finally {
-				pcs.firePropertyChange("busy", this.busy, this.busy = false);
-			}
-	}
-
-	private void next0() {
-		try {
-			pcs.firePropertyChange("busy", false, this.busy = true);
-			if (getResultSet() != null) {
-				if (getResultSet().next()) {
-					appendToResult(rowToString(getResultSet()));
-					resultSetPositioned = true;
-				} else {
-					appendToResult("-- End of result set -----------------------");
-					closeResultSet();
-				}
-			}
-		} catch (SQLException e) {
-			sqlException(e);
-		} finally {
-			pcs.firePropertyChange("busy", true, this.busy = false);
-		}
-	}
-
-	/**
-	 * Retrieve an identifier (XID) for the current transaction.
-	 *
-	 * @return A transaction identifier, or a dummy string if a transaction
-	 *         identifier could not be retrieved.
-	 * @throws SQLException
-	 */
-	private String retrieveCurrentXid() {
-		String xidSQL;
-		switch (dbProduct) {
-		case "Apache Derby":
-			xidSQL = getXidDerby;
-			break;
-		case "DB2":
-			xidSQL = getXidDb2;
-			break;
-		default:
-			return "(no Xid)";
-		}
-		try (PreparedStatement ps = getConnection().prepareStatement(xidSQL)) {
-			try (ResultSet rs = ps.executeQuery()) {
-				rs.next();
-				return rs.getString(2);
-			}
-		} catch (SQLException e) {
-			return "(no Xid)";
-		}
-	}
-
-	private void rollback0() {
-		endTransaction(false);
-	}
-
-	private List<String> split(String sqls) {
-		return Arrays.asList(sqls.split(";")).stream().filter((s) -> !s.trim().isEmpty()).collect(Collectors.toList());
-	}
-
-	private void sqlException(SQLException e) {
-		appendToResult(e.toString() + "\n");
-	}
-
-	private void update0() {
-		try {
-			pcs.firePropertyChange("busy", false, true);
-			ResultSetMetaData rsmd = getResultSet().getMetaData();
-			for (int col = 1; col < rsmd.getColumnCount(); col++) {
-				if (rsmd.isDefinitelyWritable(col) && !rsmd.isAutoIncrement(col)) {
-					getResultSet().updateObject(col, getResultSet().getObject(col));
-					getResultSet().updateRow();
-					break;
-				}
-			}
-		} catch (SQLException e) {
-			appendToResult(e);
-		} finally {
-			pcs.firePropertyChange("busy", true, false);
-		}
-	}
-
 	protected void setTransactionId(String xid) {
 		pcs.firePropertyChange("xid", this.xid, this.xid = xid);
+	}
+
+	public void setUrl(String url) {
+		this.url = url;
 	}
 
 	/**
@@ -591,7 +581,7 @@ public class Executor {
 				ex.shutdownNow();
 				// Wait a bit for tasks to respond to being cancelled
 				if (!ex.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS)) {
-					System.err.println("Executor service did not terminate");
+					LOGGER.severe("Executor service did not terminate");
 				}
 			}
 		} catch (InterruptedException e) {
@@ -610,10 +600,10 @@ public class Executor {
 						connection.rollback();
 					}
 					connection.close();
-					System.out.println("Database connection closed");
+					LOGGER.info("Database connection closed");
 				}
 			} catch (SQLException e) {
-				System.err.println("Error closing database connection: " + e.getMessage());
+				LOGGER.log(Level.SEVERE, "Error closing database connection", e);
 			}
 		}
 
@@ -636,14 +626,33 @@ public class Executor {
 		}
 	}
 
-	public String[] getSQLKeywords() {
-		return new String[] { "SELECT", "FROM", "WHERE", "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE",
-				"CREATE", "TABLE", "ALTER", "DROP", "INDEX", "VIEW", "JOIN", "INNER", "LEFT", "RIGHT", "OUTER", "ON",
-				"AS", "AND", "OR", "NOT", "IN", "BETWEEN", "LIKE", "IS", "NULL", "ORDER", "BY", "GROUP", "HAVING",
-				"DISTINCT", "COUNT", "SUM", "AVG", "MIN", "MAX", "UNION", "ALL", "BEGIN", "COMMIT", "ROLLBACK",
-				"TRANSACTION", "WORK", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "UNIQUE", "CHECK", "DEFAULT", "INT",
-				"INTEGER", "VARCHAR", "CHAR", "DATE", "TIME", "TIMESTAMP", "DECIMAL", "NUMERIC", "FLOAT", "DOUBLE",
-				"BOOLEAN", "BLOB", "CLOB", "GRANT", "REVOKE", "WITH", "LOCK", "FOR", "SHARE", "NOWAIT" };
+	private List<String> split(String sqls) {
+		return Arrays.asList(sqls.split(";")).stream().filter((s) -> !s.trim().isEmpty()).collect(Collectors.toList());
+	}
 
+	private void sqlException(SQLException e) {
+		appendToResult(e.toString() + "\n");
+	}
+
+	public void update() {
+		ex.submit(() -> update0());
+	}
+
+	private void update0() {
+		try {
+			pcs.firePropertyChange("busy", false, true);
+			ResultSetMetaData rsmd = getResultSet().getMetaData();
+			for (int col = 1; col < rsmd.getColumnCount(); col++) {
+				if (rsmd.isDefinitelyWritable(col) && !rsmd.isAutoIncrement(col)) {
+					getResultSet().updateObject(col, getResultSet().getObject(col));
+					getResultSet().updateRow();
+					break;
+				}
+			}
+		} catch (SQLException e) {
+			appendToResult(e);
+		} finally {
+			pcs.firePropertyChange("busy", true, false);
+		}
 	}
 }

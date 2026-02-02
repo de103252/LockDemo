@@ -17,6 +17,8 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.net.URL;
 import java.sql.SQLException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.prefs.Preferences;
 
 import javax.sql.rowset.JdbcRowSet;
@@ -45,7 +47,8 @@ import com.formdev.flatlaf.FlatIntelliJLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 
 public class LockDemo {
-	// Timing constants
+	private static final Logger LOGGER;
+
 	private static final int LOCK_UPDATE_INTERVAL_MS = 250;
 
 	private JFrame frmDatabaseLockDemo;
@@ -54,6 +57,15 @@ public class LockDemo {
 	private JTable lockDisplay;
 	private JdbcRowSet lockRowSet;
 	private volatile boolean running = true;
+
+    static {
+        String path = LockDemo.class.getClassLoader()
+                                    .getResource("logging.properties")
+                                    .getFile();
+        System.setProperty("java.util.logging.config.file", path);
+    	System.out.println("Initializing logger: " + path);
+        LOGGER = Logger.getLogger(LockDemo.class.getName());
+    }
 
 	/**
 	 * Launch the application.
@@ -65,7 +77,7 @@ public class LockDemo {
 
 		// Add shutdown hook for cleanup
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-			System.out.println("Shutting down LockDemo...");
+			LOGGER.info("Shutting down LockDemo...");
 			window.shutdown();
 		}));
 
@@ -83,7 +95,7 @@ public class LockDemo {
 		try {
 			window.initLockDisplay();
 		} catch (SQLException e) {
-			System.err.println("Failed to initialize lock display: " + e.getMessage());
+			LOGGER.log(Level.SEVERE, "Failed to initialize lock display", e);
 			e.printStackTrace();
 		}
 		prefs.flush();
@@ -110,7 +122,7 @@ public class LockDemo {
 						});
 					}
 				} catch (SQLException e) {
-					System.err.println("Error updating lock info: " + e.getMessage());
+					LOGGER.log(Level.SEVERE, "Error updating lock info", e);
 				}
 			}
 			try {
@@ -132,9 +144,8 @@ public class LockDemo {
 		if (lockRowSet != null) {
 			try {
 				lockRowSet.close();
-				System.out.println("Lock rowset closed");
 			} catch (SQLException e) {
-				System.err.println("Error closing lock rowset: " + e.getMessage());
+				LOGGER.log(Level.SEVERE, "Error closing lock rowset", e);
 			}
 		}
 
@@ -146,7 +157,7 @@ public class LockDemo {
 			rightSqlPanel.shutdown();
 		}
 
-		System.out.println("LockDemo shutdown complete");
+		LOGGER.info("LockDemo shutdown complete");
 	}
 
 	/**
@@ -340,8 +351,7 @@ public class LockDemo {
 			prefs.put("theme", themeName);
 			prefs.flush();
 		} catch (Exception ex) {
-			System.err.println("Failed to apply theme: " + themeName);
-			ex.printStackTrace();
+			LOGGER.log(Level.INFO, "Failed to apply theme: " + themeName, ex);
 		}
 	}
 

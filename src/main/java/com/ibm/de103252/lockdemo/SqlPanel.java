@@ -66,7 +66,7 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 public class SqlPanel extends JPanel {
 	
 	// Constants
-	private static final Logger LOGGER = Logger.getLogger(SqlPanel.class.getName());
+	private final Logger LOGGER = Logger.getGlobal();
 	private static final int AUTO_COMPLETION_DELAY_MS = 1000;
 	private static final String FONT_NAME = "Consolas";
 	private static final int FONT_SIZE = 13;
@@ -97,7 +97,7 @@ public class SqlPanel extends JPanel {
 	}
 
 	// Instance fields
-	private final Executor executor = new Executor();
+	private final Executor executor;
 	private final ScriptManager scriptManager = new ScriptManager();
 	private final boolean isLeftPanel;
 	
@@ -137,6 +137,7 @@ public class SqlPanel extends JPanel {
 	 */
 	public SqlPanel(boolean left) {
 		this.isLeftPanel = left;
+		this.executor = new Executor(left);
 		initializeComponents();
 		setupLayout();
 		setupListeners();
@@ -226,9 +227,9 @@ public class SqlPanel extends JPanel {
 		connectAction = new SqlAction("Connect") {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				String action = executor.isConnected() ? "Disconnect" : "Connect";
+				String action = executor.isConnected() ? "Disconnect from" : "Connect to";
 				String url = getSelectedUrl();
-				logAction("%s %s", action, url != null ? "to " + url : "");
+				logAction("%s %s", action, url);
 				connectOrDisconnect();
 			}
 		};

@@ -51,17 +51,44 @@ insert into emp(eid, name, salary) values(222, 'Doe', 4711);
 
 
 
+-- Massenupdate
+
+-- Tut effektiv nichts, hält aber viele Locks.
+-- Bei "sehr vielen" Locks kommt es zu einer Lock Escalation.
+-- Wie viel "sehr viel ist, wird von der Datenbank-Konfigurationseinstellung
+-- derby.locks.escalationThreshold bestimmt, die wir abfragen und auch
+-- verändern können, siehe folgende Statements.
+UPDATE person SET dob = dob;
+
+-- Lock Escalation Threshold abfragen
+VALUES SYSCS_UTIL.SYSCS_GET_DATABASE_PROPERTY(
+ 'derby.locks.escalationThreshold'
+);
+
+-- Lock Escalation Threshold ändern
+CALL SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY(
+ 'derby.locks.escalationThreshold',
+ '1000000');
 
 
 
 
--- Klausuraufgabe aus DBMS-Implementierungen
+
+
+
+-- Klausuraufgabe aus DBMS-Implementierungen:
+--
+-- Wie viele Ergebniszeilen liefern die Abfragen (1) bis (3) zurück,
+-- wenn beide Transaktionen in "Read Committed" (CS) laufen?
+-- Wie viele Ergebniszeilen wären zurückgeliefert worden,
+-- wenn die Transaktionen in UR gelaufen wären?
 
 
 -- Links -------------------------------  -- Rechts --------------------------------
 CREATE TABLE STAR
 (ID INTEGER, Name VARCHAR(20));
-              
+COMMIT;
+
 INSERT INTO STAR VALUES (3, 'Miley');     
                                           INSERT INTO STAR VALUES (7, 'Billie');
 INSERT INTO STAR VALUES (5, 'Taylor');
