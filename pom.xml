@@ -69,17 +69,17 @@
 		</dependency>
 		
 		<dependency>
-			<groupId>com.formdev</groupId>
-			<artifactId>flatlaf</artifactId>
-			<version>3.5.4</version>
-		</dependency>
-		
-		<dependency>
 			<groupId>com.fifesoft</groupId>
 			<artifactId>rsyntaxtextarea</artifactId>
 			<version>3.6.1</version>
 		</dependency>
-		<!-- Source:
+<!-- Source: https://mvnrepository.com/artifact/com.jgoodies/jgoodies-looks -->
+<dependency>
+    <groupId>com.jgoodies</groupId>
+    <artifactId>jgoodies-looks</artifactId>
+    <version>2.7.0</version>
+    <scope>compile</scope>
+</dependency>		<!-- Source:
 		https://mvnrepository.com/artifact/com.fifesoft/autocomplete -->
 		<dependency>
 			<groupId>com.fifesoft</groupId>

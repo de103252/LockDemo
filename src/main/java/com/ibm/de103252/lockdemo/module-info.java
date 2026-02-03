@@ -1,10 +1,3 @@
-/**
- * 
- */
-/**
- * @author 103252724
- *
- */
 module LockDemo {
     requires java.desktop;
     requires java.sql;

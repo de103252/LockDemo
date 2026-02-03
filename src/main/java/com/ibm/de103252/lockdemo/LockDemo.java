@@ -37,14 +37,15 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.KeyStroke;
+import javax.swing.LookAndFeel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.UIManager.LookAndFeelInfo;
+import javax.swing.UnsupportedLookAndFeelException;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumnModel;
 
-import com.formdev.flatlaf.FlatDarkLaf;
-import com.formdev.flatlaf.FlatIntelliJLaf;
-import com.formdev.flatlaf.FlatLightLaf;
+import com.jgoodies.looks.plastic.Plastic3DLookAndFeel;
 
 public class LockDemo {
 	private static final Logger LOGGER;
@@ -315,8 +316,10 @@ public class LockDemo {
 
 	private void setLookAndFeel() {
 		Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
-		String theme = prefs.get("theme", "IntelliJ");
-		applyTheme(theme);
+		try {
+			UIManager.setLookAndFeel(new Plastic3DLookAndFeel());
+		} catch (UnsupportedLookAndFeelException e) {
+		}
 	}
 
 	/**
@@ -328,14 +331,11 @@ public class LockDemo {
 		try {
 			switch (themeName) {
 			case "Light":
-				UIManager.setLookAndFeel(new FlatLightLaf());
 				break;
 			case "Dark":
-				UIManager.setLookAndFeel(new FlatDarkLaf());
 				break;
 			case "IntelliJ":
 			default:
-				UIManager.setLookAndFeel(new FlatIntelliJLaf());
 				break;
 			}
 
@@ -439,29 +439,28 @@ public class LockDemo {
 		themeMenu.setMnemonic(KeyEvent.VK_T);
 
 		ButtonGroup themeGroup = new ButtonGroup();
+		for (LookAndFeelInfo laf: UIManager.getInstalledLookAndFeels()) {
+			JRadioButtonMenuItem lafItem = new JRadioButtonMenuItem(laf.getName());
+			lafItem.setAction(new AbstractAction(laf.getClassName()) {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					try {
+						UIManager.setLookAndFeel((LookAndFeel) Class.forName((String) getValue(AbstractAction.NAME)).newInstance());
+						SwingUtilities.updateComponentTreeUI(frmDatabaseLockDemo);
+					} catch (IllegalAccessException | InstantiationException | ClassNotFoundException
+							| UnsupportedLookAndFeelException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+				}
+			});
+			themeGroup.add(lafItem);
+			themeMenu.add(lafItem);
+			
+		}
+		menuBar.add(themeMenu);
+		
 		Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
-		String currentTheme = prefs.get("theme", "IntelliJ");
-
-		JRadioButtonMenuItem lightTheme = new JRadioButtonMenuItem("Light");
-		lightTheme.setSelected("Light".equals(currentTheme));
-		lightTheme.addActionListener(e -> applyTheme("Light"));
-		themeGroup.add(lightTheme);
-		themeMenu.add(lightTheme);
-
-		JRadioButtonMenuItem intellijTheme = new JRadioButtonMenuItem("IntelliJ");
-		intellijTheme.setSelected("IntelliJ".equals(currentTheme));
-		intellijTheme.addActionListener(e -> applyTheme("IntelliJ"));
-		themeGroup.add(intellijTheme);
-		themeMenu.add(intellijTheme);
-
-		JRadioButtonMenuItem darkTheme = new JRadioButtonMenuItem("Dark");
-		darkTheme.setSelected("Dark".equals(currentTheme));
-		darkTheme.addActionListener(e -> applyTheme("Dark"));
-		themeGroup.add(darkTheme);
-		themeMenu.add(darkTheme);
-
-		viewMenu.add(themeMenu);
-		menuBar.add(viewMenu);
 
 		frmDatabaseLockDemo.setJMenuBar(menuBar);
 	}
