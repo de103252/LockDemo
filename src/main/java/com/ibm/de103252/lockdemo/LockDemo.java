@@ -42,10 +42,9 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UIManager.LookAndFeelInfo;
 import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.plaf.nimbus.NimbusLookAndFeel;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumnModel;
-
-import com.jgoodies.looks.plastic.Plastic3DLookAndFeel;
 
 public class LockDemo {
 	private static final Logger LOGGER;
@@ -317,7 +316,7 @@ public class LockDemo {
 	private void setLookAndFeel() {
 		Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
 		try {
-			UIManager.setLookAndFeel(new Plastic3DLookAndFeel());
+			UIManager.setLookAndFeel(new NimbusLookAndFeel());
 		} catch (UnsupportedLookAndFeelException e) {
 		}
 	}
