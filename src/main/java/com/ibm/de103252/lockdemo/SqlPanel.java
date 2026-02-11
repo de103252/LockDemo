@@ -47,16 +47,18 @@ import org.fife.ui.rsyntaxtextarea.folding.FoldParserManager;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 /**
- * SQL Panel component for executing SQL statements and managing database connections.
- * Provides a rich text editor with syntax highlighting, auto-completion, and transaction management.
+ * SQL Panel component for executing SQL statements and managing database
+ * connections. Provides a rich text editor with syntax highlighting,
+ * auto-completion, and transaction management.
  * 
- * <p>Features:
+ * <p>
+ * Features:
  * <ul>
- *   <li>SQL syntax highlighting and code folding</li>
- *   <li>Auto-completion for SQL keywords</li>
- *   <li>Transaction isolation level management</li>
- *   <li>Script loading and saving</li>
- *   <li>SQL formatting (Ctrl+Shift+F)</li>
+ * <li>SQL syntax highlighting and code folding</li>
+ * <li>Auto-completion for SQL keywords</li>
+ * <li>Transaction isolation level management</li>
+ * <li>Script loading and saving</li>
+ * <li>SQL formatting (Ctrl+Shift+F)</li>
  * </ul>
  * 
  * @author IBM
@@ -64,7 +66,7 @@ import org.fife.ui.rtextarea.RTextScrollPane;
  */
 @SuppressWarnings("serial")
 public class SqlPanel extends JPanel {
-	
+
 	// Constants
 	private final Logger LOGGER = Logger.getGlobal();
 	private static final int AUTO_COMPLETION_DELAY_MS = 1000;
@@ -75,39 +77,33 @@ public class SqlPanel extends JPanel {
 	private static final String PREF_NODE_NAME = LockDemo.class.getName();
 	private static final String PREF_LAST_USED_URL = "lastUsedUrl";
 	private static final String PREF_URL_PREFIX = "url.";
-	
+
 	// Status colors
 	private static final Color COLOR_DISCONNECTED = Color.GRAY;
 	private static final Color COLOR_CONNECTED = Color.GREEN;
 	private static final Color COLOR_IN_TRANSACTION = Color.YELLOW;
 	private static final Color COLOR_BUSY = Color.RED;
-	
+
 	// Default JDBC URLs
-	private static final String[] DEFAULT_URLS = {
-		"jdbc:derby:memory:derbyDB;create=true",
-		"jdbc:derby:derbyDB;create=true",
-		"jdbc:derby://localhost:1527/DBIDB"
-	};
-	
+	private static final String[] DEFAULT_URLS = { "jdbc:derby:memory:derbyDB;create=true",
+			"jdbc:derby:derbyDB;create=true", "jdbc:derby://localhost:1527/DBIDB" };
+
 	static {
-		FoldParserManager.get().addFoldParserMapping(
-			SyntaxConstants.SYNTAX_STYLE_SQL, 
-			new SqlFoldParser(true)
-		);
+		FoldParserManager.get().addFoldParserMapping(SyntaxConstants.SYNTAX_STYLE_SQL, new SqlFoldParser(true));
 	}
 
 	// Instance fields
 	private final Executor executor;
 	private final ScriptManager scriptManager = new ScriptManager();
 	private final boolean isLeftPanel;
-	
+
 	// UI Components
 	private RSyntaxTextArea sqlEditor;
 	private JTextArea resultArea;
 	private JComboBox<String> urlComboBox;
 	private JComboBox<IsolationLevel> isolationLevelComboBox;
 	private JLabel statusLabel;
-	
+
 	// Actions
 	private Action executeAction;
 	private Action nextAction;
@@ -244,13 +240,12 @@ public class SqlPanel extends JPanel {
 			public void actionPerformed(ActionEvent e) {
 				IsolationLevel selectedIsolation = getSelectedIsolationLevel();
 				String sql = getSelectedSQLStatement();
-				
+
 				if (selectedIsolation == null || sql == null) {
 					return;
 				}
-				
-				logAction("Run SQL statement in isolation level %s:%n%s", 
-						selectedIsolation, sql);
+
+				logAction("Run SQL statement in isolation level %s:%n%s", selectedIsolation, sql);
 				executor.setIsolationLevel(selectedIsolation.getIsolation());
 				executor.execute(sql);
 				updateControlStates();
@@ -317,7 +312,7 @@ public class SqlPanel extends JPanel {
 	 */
 	private void setupLayout() {
 		setLayout(createMainLayout());
-		
+
 		addConnectionPanel();
 		addStatusLabel();
 		addIsolationPanel();
@@ -344,14 +339,14 @@ public class SqlPanel extends JPanel {
 	private void addConnectionPanel() {
 		JPanel panel = new JPanel();
 		panel.setBorder(new EtchedBorder(EtchedBorder.LOWERED, null, null));
-		
+
 		GridBagLayout layout = new GridBagLayout();
 		layout.columnWidths = new int[] { 201, 86, 0 };
 		layout.rowHeights = new int[] { 23, 0 };
 		layout.columnWeights = new double[] { 1.0, 0.0, Double.MIN_VALUE };
 		layout.rowWeights = new double[] { 0.0, Double.MIN_VALUE };
 		panel.setLayout(layout);
-		
+
 		// Add URL combo box
 		GridBagConstraints gbc = new GridBagConstraints();
 		gbc.weightx = 1.0;
@@ -361,7 +356,7 @@ public class SqlPanel extends JPanel {
 		gbc.gridx = 0;
 		gbc.gridy = 0;
 		panel.add(urlComboBox, gbc);
-		
+
 		// Add connect button
 		JButton connectButton = new JButton(connectAction);
 		connectButton.setToolTipText("Connect to the data source");
@@ -370,7 +365,7 @@ public class SqlPanel extends JPanel {
 		gbc.gridx = 1;
 		gbc.gridy = 0;
 		panel.add(connectButton, gbc);
-		
+
 		// Add panel to main layout
 		gbc = new GridBagConstraints();
 		gbc.fill = GridBagConstraints.BOTH;
@@ -397,13 +392,13 @@ public class SqlPanel extends JPanel {
 	 */
 	private void addIsolationPanel() {
 		JPanel panel = new JPanel();
-		
+
 		JLabel label = new JLabel("Isolation");
 		label.setDisplayedMnemonic('I');
 		label.setLabelFor(isolationLevelComboBox);
 		panel.add(label);
 		panel.add(isolationLevelComboBox);
-		
+
 		GridBagConstraints gbc = new GridBagConstraints();
 		gbc.insets = new Insets(0, 0, 5, 0);
 		gbc.fill = GridBagConstraints.BOTH;
@@ -419,7 +414,7 @@ public class SqlPanel extends JPanel {
 		RTextScrollPane scrollPane = new RTextScrollPane(sqlEditor);
 		scrollPane.setLineNumbersEnabled(true);
 		scrollPane.setFoldIndicatorEnabled(true);
-		
+
 		GridBagConstraints gbc = new GridBagConstraints();
 		gbc.weighty = 30.0;
 		gbc.fill = GridBagConstraints.BOTH;
@@ -434,7 +429,7 @@ public class SqlPanel extends JPanel {
 	 */
 	private void addResultPanel() {
 		JScrollPane scrollPane = new JScrollPane(resultArea);
-		
+
 		GridBagConstraints gbc = new GridBagConstraints();
 		gbc.weighty = 120.0;
 		gbc.fill = GridBagConstraints.BOTH;
@@ -451,19 +446,19 @@ public class SqlPanel extends JPanel {
 		JPanel panel = new JPanel();
 		FlowLayout layout = (FlowLayout) panel.getLayout();
 		layout.setVgap(3);
-		
+
 		// Add buttons with mnemonics
-		panel.add(createButton(executeAction, "Execute selected SQL statement", 
+		panel.add(new JLabel(isLeftPanel ? "Alt-1 … Alt-5" : "Alt-6 … Alt-0"));
+		panel.add(createButton(executeAction, "Execute selected SQL statement",
 				isLeftPanel ? KeyEvent.VK_1 : KeyEvent.VK_6));
-		panel.add(createButton(nextAction, "Move result set to next row", 
-				isLeftPanel ? KeyEvent.VK_2 : KeyEvent.VK_7));
-		panel.add(createButton(commitAction, "Commit the current transaction", 
+		panel.add(createButton(nextAction, "Move result set to next row", isLeftPanel ? KeyEvent.VK_2 : KeyEvent.VK_7));
+		panel.add(createButton(commitAction, "Commit the current transaction",
 				isLeftPanel ? KeyEvent.VK_3 : KeyEvent.VK_8));
-		panel.add(createButton(updateAction, "Update row that the current result set is positioned on", 
+		panel.add(createButton(updateAction, "Update row that the current result set is positioned on",
 				isLeftPanel ? KeyEvent.VK_4 : KeyEvent.VK_9));
-		panel.add(createButton(rollbackAction, "Roll the current transaction back", 
+		panel.add(createButton(rollbackAction, "Roll the current transaction back",
 				isLeftPanel ? KeyEvent.VK_5 : KeyEvent.VK_0));
-		
+
 		GridBagConstraints gbc = new GridBagConstraints();
 		gbc.insets = new Insets(0, 0, 5, 0);
 		gbc.anchor = GridBagConstraints.SOUTH;
@@ -540,8 +535,10 @@ public class SqlPanel extends JPanel {
 			String url = getSelectedUrl();
 			if (url != null) {
 				executor.connect(url);
-				setupAutoCompletion();
-				saveUrlToPreferences(url);
+				if (executor.isConnected()) {
+					setupAutoCompletion();
+					saveUrlToPreferences(url);
+				}
 			}
 		}
 	}
@@ -562,15 +559,15 @@ public class SqlPanel extends JPanel {
 	 */
 	private void updatePreferences(String selectedUrl) throws BackingStoreException {
 		Preferences prefs = Preferences.userRoot().node(PREF_NODE_NAME);
-		
+
 		// Store the most recently used URL
 		prefs.put(PREF_LAST_USED_URL, selectedUrl);
-		
+
 		// Check if this URL already exists in the list
 		if (!urlExistsInPreferences(prefs, selectedUrl)) {
 			addUrlToPreferences(prefs, selectedUrl);
 		}
-		
+
 		prefs.flush();
 	}
 
@@ -620,12 +617,12 @@ public class SqlPanel extends JPanel {
 	 */
 	private CompletionProvider createCompletionProvider() {
 		DefaultCompletionProvider provider = new DefaultCompletionProvider();
-		
+
 		String[] keywords = executor.getSQLKeywords();
 		for (String keyword : keywords) {
 			provider.addCompletion(new BasicCompletion(provider, keyword.toLowerCase()));
 		}
-		
+
 		return provider;
 	}
 
@@ -637,14 +634,12 @@ public class SqlPanel extends JPanel {
 	private JFileChooser createFileChooser() {
 		JFileChooser fileChooser = new JFileChooser();
 		fileChooser.setCurrentDirectory(ScriptManager.getLastDirectory());
-		
-		FileNameExtensionFilter filter = new FileNameExtensionFilter(
-			"SQL Scripts (*.sql, *.ddl, *.dml)",
-			ScriptManager.getSqlFileExtensions()
-		);
+
+		FileNameExtensionFilter filter = new FileNameExtensionFilter("SQL Scripts (*.sql, *.ddl, *.dml)",
+				ScriptManager.getSqlFileExtensions());
 		fileChooser.setFileFilter(filter);
 		fileChooser.setAcceptAllFileFilterUsed(true);
-		
+
 		return fileChooser;
 	}
 
@@ -659,20 +654,19 @@ public class SqlPanel extends JPanel {
 
 		// Basic SQL formatting
 		String formatted = text
-			// Add newlines before major keywords
-			.replaceAll("(?i)\\s+(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|OUTER|ON|GROUP BY|ORDER BY|HAVING|UNION)",
-					"\n$1")
-			.replaceAll("(?i)\\s+(INSERT|INTO|VALUES|UPDATE|SET|DELETE)", "\n$1")
-			.replaceAll("(?i)\\s+(BEGIN|COMMIT|ROLLBACK)", "\n$1")
-			// Clean up multiple spaces
-			.replaceAll("\\s+", " ")
-			// Clean up multiple newlines
-			.replaceAll("\\n+", "\n")
-			// Trim each line
-			.replaceAll("(?m)^\\s+|\\s+$", "")
-			// Add indentation for certain keywords
-			.replaceAll("(?m)^(WHERE|AND|OR|ON|SET|VALUES)", "  $1")
-			.trim();
+				// Add newlines before major keywords
+				.replaceAll("(?i)\\s+(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|OUTER|ON|GROUP BY|ORDER BY|HAVING|UNION)",
+						"\n$1")
+				.replaceAll("(?i)\\s+(INSERT|INTO|VALUES|UPDATE|SET|DELETE)", "\n$1")
+				.replaceAll("(?i)\\s+(BEGIN|COMMIT|ROLLBACK)", "\n$1")
+				// Clean up multiple spaces
+				.replaceAll("\\s+", " ")
+				// Clean up multiple newlines
+				.replaceAll("\\n+", "\n")
+				// Trim each line
+				.replaceAll("(?m)^\\s+|\\s+$", "")
+				// Add indentation for certain keywords
+				.replaceAll("(?m)^(WHERE|AND|OR|ON|SET|VALUES)", "  $1").trim();
 
 		sqlEditor.setText(formatted);
 		sqlEditor.setCaretPosition(0);
@@ -714,10 +708,10 @@ public class SqlPanel extends JPanel {
 		Preferences prefs = Preferences.userRoot().node(PREF_NODE_NAME);
 		DefaultComboBoxModel<String> model = new DefaultComboBoxModel<>();
 		String lastUsedUrl = null;
-		
+
 		try {
 			lastUsedUrl = prefs.get(PREF_LAST_USED_URL, null);
-			
+
 			// Load all saved URLs
 			for (String key : prefs.keys()) {
 				if (key.startsWith(PREF_URL_PREFIX)) {
@@ -727,16 +721,16 @@ public class SqlPanel extends JPanel {
 		} catch (BackingStoreException e) {
 			LOGGER.log(Level.WARNING, "Failed to load URLs from preferences", e);
 		}
-		
+
 		// Add default URLs if none saved
 		if (model.getSize() == 0) {
 			for (String url : DEFAULT_URLS) {
 				model.addElement(url);
 			}
 		}
-		
+
 		urlComboBox.setModel(model);
-		
+
 		// Select the last used URL if it exists
 		selectLastUsedUrl(model, lastUsedUrl);
 	}
@@ -762,7 +756,7 @@ public class SqlPanel extends JPanel {
 		if (!checkUnsavedChanges("creating a new file")) {
 			return;
 		}
-		
+
 		sqlEditor.setText("");
 		scriptManager.clearCurrentFile();
 	}
@@ -774,10 +768,10 @@ public class SqlPanel extends JPanel {
 		if (!checkUnsavedChanges("opening a new file")) {
 			return;
 		}
-		
+
 		JFileChooser fileChooser = createFileChooser();
 		fileChooser.setDialogTitle("Open SQL Script");
-		
+
 		if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
 			loadScriptFile(fileChooser.getSelectedFile());
 		}
@@ -827,12 +821,12 @@ public class SqlPanel extends JPanel {
 	public void saveScriptAs() {
 		JFileChooser fileChooser = createFileChooser();
 		fileChooser.setDialogTitle("Save SQL Script As");
-		
+
 		// Suggest a default name if current file exists
 		if (scriptManager.getCurrentFile() != null) {
 			fileChooser.setSelectedFile(scriptManager.getCurrentFile());
 		}
-		
+
 		if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
 			saveScriptToFile(fileChooser.getSelectedFile());
 		}
@@ -846,12 +840,12 @@ public class SqlPanel extends JPanel {
 		if (!ScriptManager.isSqlFile(file)) {
 			file = new File(file.getAbsolutePath() + ".sql");
 		}
-		
+
 		// Check if file exists
 		if (file.exists() && !confirmOverwrite()) {
 			return;
 		}
-		
+
 		try {
 			scriptManager.saveScript(file, sqlEditor.getText());
 			showInfoDialog("Script saved successfully: " + file.getName());
@@ -871,20 +865,16 @@ public class SqlPanel extends JPanel {
 		if (!scriptManager.isModified(sqlEditor.getText())) {
 			return true;
 		}
-		
-		int result = JOptionPane.showConfirmDialog(
-			this,
-			"Current script has unsaved changes. Do you want to save before " + action + "?",
-			"Unsaved Changes",
-			JOptionPane.YES_NO_CANCEL_OPTION,
-			JOptionPane.WARNING_MESSAGE
-		);
-		
+
+		int result = JOptionPane.showConfirmDialog(this,
+				"Current script has unsaved changes. Do you want to save before " + action + "?", "Unsaved Changes",
+				JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+
 		if (result == JOptionPane.YES_OPTION) {
 			saveScript();
 			return true;
 		}
-		
+
 		return result != JOptionPane.CANCEL_OPTION;
 	}
 
@@ -892,13 +882,8 @@ public class SqlPanel extends JPanel {
 	 * Confirm file overwrite.
 	 */
 	private boolean confirmOverwrite() {
-		int result = JOptionPane.showConfirmDialog(
-			this,
-			"File already exists. Do you want to overwrite it?",
-			"Confirm Overwrite",
-			JOptionPane.YES_NO_OPTION,
-			JOptionPane.WARNING_MESSAGE
-		);
+		int result = JOptionPane.showConfirmDialog(this, "File already exists. Do you want to overwrite it?",
+				"Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
 		return result == JOptionPane.YES_OPTION;
 	}
 
@@ -933,12 +918,9 @@ public class SqlPanel extends JPanel {
 	private void setupSqlFormatting() {
 		InputMap inputMap = sqlEditor.getInputMap();
 		ActionMap actionMap = sqlEditor.getActionMap();
-		
-		KeyStroke formatKey = KeyStroke.getKeyStroke(
-			KeyEvent.VK_F, 
-			KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK
-		);
-		
+
+		KeyStroke formatKey = KeyStroke.getKeyStroke(KeyEvent.VK_F, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK);
+
 		inputMap.put(formatKey, "formatSQL");
 		actionMap.put("formatSQL", new AbstractAction() {
 			@Override
@@ -985,18 +967,18 @@ public class SqlPanel extends JPanel {
 	 */
 	private void applyConnectionState(ConnectionState state) {
 		switch (state) {
-			case BUSY:
-				applyBusyState();
-				break;
-			case IN_TRANSACTION:
-				applyInTransactionState();
-				break;
-			case CONNECTED:
-				applyConnectedState();
-				break;
-			case DISCONNECTED:
-				applyDisconnectedState();
-				break;
+		case BUSY:
+			applyBusyState();
+			break;
+		case IN_TRANSACTION:
+			applyInTransactionState();
+			break;
+		case CONNECTED:
+			applyConnectedState();
+			break;
+		case DISCONNECTED:
+			applyDisconnectedState();
+			break;
 		}
 	}
 
@@ -1018,7 +1000,7 @@ public class SqlPanel extends JPanel {
 		urlComboBox.setEnabled(false);
 		statusLabel.setBackground(COLOR_IN_TRANSACTION);
 		statusLabel.setText("In Tx: " + executor.getCurrentXid());
-		
+
 		nextAction.setEnabled(executor.isResultSetOpen());
 		updateAction.setEnabled(executor.isResultSetPositioned());
 		executeAction.setEnabled(isNotBlank(getSelectedSQLStatement()));
@@ -1035,16 +1017,16 @@ public class SqlPanel extends JPanel {
 		urlComboBox.setEnabled(false);
 		statusLabel.setBackground(COLOR_CONNECTED);
 		statusLabel.setText("Connected");
-		
+
 		commitAction.setEnabled(false);
 		rollbackAction.setEnabled(false);
 		nextAction.setEnabled(false);
 		updateAction.setEnabled(false);
 		executeAction.setEnabled(isNotBlank(getSelectedSQLStatement()));
-		
+
 		isolationLevelComboBox.setSelectedItem(executor.getIsolationLevel());
 		isolationLevelComboBox.setEnabled(true);
-		
+
 		connectAction.putValue(Action.NAME, "Disconnect");
 		connectAction.setEnabled(true);
 	}
@@ -1056,14 +1038,14 @@ public class SqlPanel extends JPanel {
 		urlComboBox.setEnabled(true);
 		statusLabel.setBackground(COLOR_DISCONNECTED);
 		statusLabel.setText("Disconnected");
-		
+
 		commitAction.setEnabled(false);
 		rollbackAction.setEnabled(false);
 		nextAction.setEnabled(false);
 		executeAction.setEnabled(false);
 		updateAction.setEnabled(false);
 		isolationLevelComboBox.setEnabled(false);
-		
+
 		connectAction.putValue(Action.NAME, "Connect");
 		connectAction.setEnabled(isNotBlank(getSelectedUrl()));
 	}
@@ -1088,7 +1070,7 @@ public class SqlPanel extends JPanel {
 	}
 
 	// Public getters for external access
-	
+
 	public Executor getExecutor() {
 		return executor;
 	}
@@ -1117,10 +1099,7 @@ public class SqlPanel extends JPanel {
 	 * Enum representing connection states.
 	 */
 	private enum ConnectionState {
-		DISCONNECTED,
-		CONNECTED,
-		IN_TRANSACTION,
-		BUSY
+		DISCONNECTED, CONNECTED, IN_TRANSACTION, BUSY
 	}
 }
 
