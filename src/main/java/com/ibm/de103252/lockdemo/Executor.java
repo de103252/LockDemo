@@ -14,6 +14,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.SQLWarning;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
@@ -132,13 +133,15 @@ public class Executor {
             + "        , L.MODE DESC"
             + "";
     //@formatter:on
-    
-    private final Logger LOGGER;
-	
+
+	private final Logger LOGGER;
+
 	private static final List<Integer> NUMERIC_TYPES = Arrays.asList(DECIMAL, DOUBLE, FLOAT, INTEGER, SMALLINT, BIGINT);
+
 	public Executor(boolean left) {
 		LOGGER = Logger.getLogger(left ? "L" : "R");
 	}
+
 	/**
 	 * Return a string representation of the column value.
 	 *
@@ -157,6 +160,7 @@ public class Executor {
 			return e.toString();
 		}
 	}
+
 	public static String getLocksSQL(String dbProduct) {
 		switch (dbProduct) {
 		case "Apache Derby":
@@ -167,6 +171,7 @@ public class Executor {
 			return null;
 		}
 	}
+
 	/**
 	 * Return a header row for a result set, that is, the column labels padded to
 	 * the column display widths.
@@ -179,6 +184,7 @@ public class Executor {
 		return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount()).mapToObj(i -> headerToString(rs, i))
 				.collect(Collectors.joining(" ")) + "\n";
 	}
+
 	/**
 	 * Return a string representation of the column header.
 	 *
@@ -198,6 +204,7 @@ public class Executor {
 			return e.toString();
 		}
 	}
+
 	/**
 	 * Return a data row for a result set.
 	 *
@@ -209,6 +216,7 @@ public class Executor {
 		return IntStream.rangeClosed(1, rs.getMetaData().getColumnCount()).mapToObj(i -> colToString(rs, i))
 				.collect(Collectors.joining(" ")) + "\n";
 	}
+
 	private boolean busy;
 	private Connection connection;
 	private String dbProduct;
@@ -353,6 +361,7 @@ public class Executor {
 					setResultSet(stmt.getResultSet());
 				} else {
 					int count = stmt.getUpdateCount();
+					showWarnings(stmt);
 					appendToResult(String.format("%d rows affected\n", count));
 				}
 				setTransactionId(retrieveCurrentXid());
@@ -362,6 +371,12 @@ public class Executor {
 			} finally {
 				pcs.firePropertyChange("busy", this.busy, this.busy = false);
 			}
+	}
+
+	private void showWarnings(PreparedStatement stmt) throws SQLException {
+		for (SQLWarning warning = stmt.getWarnings(); warning != null; warning = warning.getNextWarning()) {
+			appendToResult(warning);
+		}
 	}
 
 	public Connection getConnection() {
