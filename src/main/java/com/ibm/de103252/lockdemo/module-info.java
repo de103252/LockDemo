@@ -3,6 +3,5 @@ module LockDemo {
     requires java.sql;
     requires java.sql.rowset;
     requires java.prefs;
-    requires org.fife.RSyntaxTextArea;
     requires autocomplete;
 }
