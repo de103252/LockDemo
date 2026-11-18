@@ -30,7 +30,7 @@ LockDemo is an educational and testing tool designed to demonstrate and explore 
 
 - **Visual Feedback**: See locks in real-time with color-coded highlighting
 - **Dual Connections**: Simulate concurrent database access
-- **Multiple Databases**: Works with Apache Derby (embedded) and IBM DB2
+- **Multiple Databases**: Works with Apache Derby (embedded), H2 (embedded) and IBM DB2
 - **Script Management**: Save and reuse test scenarios
 - **Professional SQL Editor**: Syntax highlighting, auto-completion, and formatting
 
@@ -45,6 +45,7 @@ LockDemo is an educational and testing tool designed to demonstrate and explore 
 - **Operating System**: Windows, macOS, or Linux
 - **Database**: 
   - Apache Derby (included)
+  - H2 (included)
   - IBM DB2 (requires JDBC driver)
 
 ### Installation
@@ -169,6 +170,20 @@ jdbc:derby:derbyDB;create=true
 ```
 jdbc:derby://localhost:1527/DBIDB
 ```
+
+**H2 (shared in-memory)**:
+```
+jdbc:h2:mem:lockdemo;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=60000
+```
+
+**H2 (file or server)**:
+```
+jdbc:h2:file:./h2/lockdemo;LOCK_TIMEOUT=60000
+jdbc:h2:tcp://localhost/~/lockdemo
+```
+
+For H2, connect both panels to the *same named* database. Add `;USER=...;PASSWORD=...` to the URL
+if the database was created with credentials. See "H2 differences" under Lock Monitoring.
 
 **IBM DB2**:
 ```
@@ -352,6 +367,22 @@ The lock display shows all active locks in the database:
 - Transaction holds shared (S) lock
 - Allows other shared locks
 - Normal for SELECT operations
+
+#### H2 differences
+
+H2 uses multi-version concurrency control, so the lock display differs from Derby and DB2:
+
+- Only **table locks** are shown. `X` means a write lock, `IX` a session with uncommitted
+  changes, `IS` a session that only reads. There are no row locks.
+- A statement that waits for another session is shown as a **WAIT** (orange) row on the table
+  locked by the blocking session. When the blocker commits or rolls back, the waiting statement
+  continues, or fails after `LOCK_TIMEOUT` milliseconds.
+- Readers do not block writers, so most Derby/DB2 scenarios with shared locks (for example
+  Repeatable Read) do not block on H2. Write/write conflicts and deadlocks do.
+- The transaction ID (XID) is the H2 session ID.
+- The lock display needs the user that created the database, because H2 shows other sessions
+  only to administrators.
+- Example scripts are in `Scripts/H2`.
 
 #### Real-Time Updates
 
@@ -725,6 +756,20 @@ Currently, keyboard shortcuts are not customizable. This feature may be added in
 2. **Verify Derby**: Ensure Derby is in classpath
 3. **Check Permissions**: Ensure write access to database directory
 4. **Review Logs**: Check `derby.log` for errors
+
+#### Problem: Cannot connect to H2 database
+
+**Symptoms**:
+- "Wrong user name or password" (SQL state 28000)
+- "Database ... not found" or an empty database on the second panel
+- Lock display empty or only showing the own session
+
+**Solutions**:
+1. **Use a named database** such as `jdbc:h2:mem:lockdemo;DB_CLOSE_DELAY=-1`. A URL
+   without a name (`jdbc:h2:mem:`) gives every connection its own private database.
+2. **Same credentials on both panels**: pass `;USER=...;PASSWORD=...` in the URL.
+3. **Waiting statement fails after 2 seconds**: add `;LOCK_TIMEOUT=60000` to the URL.
+4. **File databases**: close other processes that use the same file, or use the TCP server URL.
 
 #### Problem: Cannot connect to DB2 database
 

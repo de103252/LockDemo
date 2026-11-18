@@ -84,9 +84,13 @@ public class SqlPanel extends JPanel {
 	private static final Color COLOR_IN_TRANSACTION = Color.YELLOW;
 	private static final Color COLOR_BUSY = Color.RED;
 
-	// Default JDBC URLs
+	// Default JDBC URLs. The H2 URL uses a named in-memory database, which both
+	// panels share (DB_CLOSE_DELAY=-1 keeps it alive while no connection is open),
+	// and a lock timeout similar to Derby's default of 60 seconds so that blocked
+	// statements stay visible in the lock display.
 	private static final String[] DEFAULT_URLS = { "jdbc:derby:memory:derbyDB;create=true",
-			"jdbc:derby:derbyDB;create=true", "jdbc:derby://localhost:1527/DBIDB" };
+			"jdbc:derby:derbyDB;create=true", "jdbc:derby://localhost:1527/DBIDB",
+			"jdbc:h2:mem:lockdemo;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=60000" };
 
 	static {
 		FoldParserManager.get().addFoldParserMapping(SyntaxConstants.SYNTAX_STYLE_SQL, new SqlFoldParser(true));

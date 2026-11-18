@@ -11,7 +11,6 @@
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 	</properties>
 	<build>
-		<sourceDirectory>src</sourceDirectory>
 		<plugins>
 			<plugin>
 				<artifactId>maven-compiler-plugin</artifactId>
@@ -27,9 +26,12 @@
 				<version>3.1.1</version>
 
 				<configuration>
-					<descriptorRefs>
-						<descriptorRef>jar-with-dependencies</descriptorRef>
-					</descriptorRefs>
+					<!-- Custom copy of jar-with-dependencies that merges the META-INF/services
+						files of all dependencies, so that the Derby and H2 JDBC drivers are both
+						registered in the fat jar. -->
+					<descriptors>
+						<descriptor>src/assembly/jar-with-dependencies.xml</descriptor>
+					</descriptors>
 					<finalName>lockdemo</finalName>
 					<appendAssemblyId>false</appendAssemblyId>
 					<archive>
@@ -85,6 +87,14 @@
 			<groupId>org.apache.derby</groupId>
 			<artifactId>derbyclient</artifactId>
 			<version>[10.15,)</version>
+			<scope>compile</scope>
+		</dependency>
+		<!-- H2 database (embedded/in-memory/server). The JDBC driver registers itself
+			via the ServiceLoader mechanism, so no Class.forName() is required. -->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<version>2.5.252</version>
 			<scope>compile</scope>
 		</dependency>
 	</dependencies>

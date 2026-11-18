@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Same content as the predefined "jar-with-dependencies" descriptor, plus the
+  metaInf-services container descriptor handler.
+
+  Why: Derby and H2 both ship META-INF/services/java.sql.Driver. Without merging,
+  only one of these files survives in the fat jar, and DriverManager would then
+  not find the JDBC driver of the other database (e.g. "No suitable driver" for
+  jdbc:h2: URLs). The handler can only be declared in a descriptor file, not in
+  the plugin configuration.
+-->
+<assembly xmlns="http://maven.apache.org/ASSEMBLY/2.1.1"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.1.1 https://maven.apache.org/xsd/assembly-2.1.1.xsd">
+	<id>jar-with-dependencies</id>
+	<formats>
+		<format>jar</format>
+	</formats>
+	<includeBaseDirectory>false</includeBaseDirectory>
+	<containerDescriptorHandlers>
+		<containerDescriptorHandler>
+			<handlerName>metaInf-services</handlerName>
+		</containerDescriptorHandler>
+	</containerDescriptorHandlers>
+	<dependencySets>
+		<dependencySet>
+			<outputDirectory>/</outputDirectory>
+			<useProjectArtifact>true</useProjectArtifact>
+			<unpack>true</unpack>
+			<scope>runtime</scope>
+		</dependencySet>
+	</dependencySets>
+</assembly>
