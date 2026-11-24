@@ -1,6 +1,7 @@
 package com.ibm.de103252.lockdemo;
 
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -12,6 +13,7 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.prefs.BackingStoreException;
@@ -26,16 +28,22 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EtchedBorder;
 import javax.swing.event.CaretEvent;
 import javax.swing.event.CaretListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
+
+import com.formdev.flatlaf.FlatLaf;
 
 import org.fife.ui.autocomplete.AutoCompletion;
 import org.fife.ui.autocomplete.BasicCompletion;
@@ -43,6 +51,7 @@ import org.fife.ui.autocomplete.CompletionProvider;
 import org.fife.ui.autocomplete.DefaultCompletionProvider;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rsyntaxtextarea.Theme;
 import org.fife.ui.rsyntaxtextarea.folding.FoldParserManager;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
@@ -70,7 +79,7 @@ public class SqlPanel extends JPanel {
 	// Constants
 	private final Logger LOGGER = Logger.getGlobal();
 	private static final int AUTO_COMPLETION_DELAY_MS = 1000;
-	private static final String FONT_NAME = "Consolas";
+	private static final String FONT_NAME = Font.MONOSPACED;
 	private static final int FONT_SIZE = 13;
 	private static final int SQL_EDITOR_ROWS = 20;
 	private static final int SQL_EDITOR_COLS = 60;
@@ -161,13 +170,45 @@ public class SqlPanel extends JPanel {
 	 * Create and configure the SQL editor.
 	 */
 	private void createSqlEditor() {
-		sqlEditor = new RSyntaxTextArea(SQL_EDITOR_ROWS, SQL_EDITOR_COLS);
+		sqlEditor = new RSyntaxTextArea(SQL_EDITOR_ROWS, SQL_EDITOR_COLS) {
+			private boolean initialized = true;
+
+			@Override
+			public void updateUI() {
+				super.updateUI();
+				// RSyntaxTextArea does not follow the look and feel; apply a matching theme
+				// (deferred so that it runs after the whole component tree has been updated)
+				if (initialized) {
+					SwingUtilities.invokeLater(() -> applyEditorTheme(this));
+				}
+			}
+		};
 		sqlEditor.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_SQL);
 		sqlEditor.setCodeFoldingEnabled(true);
 		sqlEditor.setAntiAliasingEnabled(true);
 		sqlEditor.setToolTipText("Enter SQL text here");
 		sqlEditor.setFont(new Font(FONT_NAME, Font.PLAIN, FONT_SIZE));
 		setupSqlFormatting();
+		applyEditorTheme(sqlEditor);
+	}
+
+	/**
+		* Apply the RSyntaxTextArea theme (dark or default) matching the current look
+		* and feel, keeping the editor's font.
+		*/
+	private void applyEditorTheme(RSyntaxTextArea editor) {
+		if (editor == null || editor.getSecondaryLanguageCount() <= 0) {
+			return;
+		}
+		String name = FlatLaf.isLafDark() ? "dark.xml" : "default.xml";
+		try (InputStream in = Theme.class.getResourceAsStream("/org/fife/ui/rsyntaxtextarea/themes/" + name)) {
+			if (in != null) {
+				Theme.load(in).apply(editor);
+				editor.setFont(new Font(FONT_NAME, Font.PLAIN, FONT_SIZE));
+			}
+		} catch (Exception e) {
+			LOGGER.log(Level.WARNING, "Failed to apply editor theme " + name, e);
+		}
 	}
 
 	/**
@@ -178,6 +219,22 @@ public class SqlPanel extends JPanel {
 		resultArea.setToolTipText("Displays SQL results");
 		resultArea.setFont(new Font(FONT_NAME, Font.PLAIN, FONT_SIZE));
 		resultArea.setEditable(false);
+
+		// Clear via context menu and Ctrl+L (works while focus is anywhere in this panel)
+		Action clearAction = new AbstractAction("Clear") {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				resultArea.setText("");
+			}
+		};
+		clearAction.putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_L, KeyEvent.CTRL_DOWN_MASK));
+		JPopupMenu popupMenu = new JPopupMenu();
+		popupMenu.add(new JMenuItem(clearAction));
+		resultArea.setComponentPopupMenu(popupMenu);
+
+		getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+				.put(KeyStroke.getKeyStroke(KeyEvent.VK_L, KeyEvent.CTRL_DOWN_MASK), "clearResult");
+		getActionMap().put("clearResult", clearAction);
 	}
 
 	/**
@@ -320,8 +377,7 @@ public class SqlPanel extends JPanel {
 		addConnectionPanel();
 		addStatusLabel();
 		addIsolationPanel();
-		addSqlEditorPanel();
-		addResultPanel();
+		addEditorAndResultPanel();
 		addButtonPanel();
 	}
 
@@ -331,9 +387,9 @@ public class SqlPanel extends JPanel {
 	private GridBagLayout createMainLayout() {
 		GridBagLayout layout = new GridBagLayout();
 		layout.columnWidths = new int[] { 600, 0 };
-		layout.rowHeights = new int[] { 0, 27, 7, 113, 33, 0, 0, 0 };
+		layout.rowHeights = new int[] { 0, 0, 0, 0, 0, 0 };
 		layout.columnWeights = new double[] { 1.0, Double.MIN_VALUE };
-		layout.rowWeights = new double[] { 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, Double.MIN_VALUE };
+		layout.rowWeights = new double[] { 0.0, 0.0, 0.0, 1.0, 0.0, Double.MIN_VALUE };
 		return layout;
 	}
 
@@ -412,35 +468,30 @@ public class SqlPanel extends JPanel {
 	}
 
 	/**
-	 * Add the SQL editor panel with scroll pane.
+	 * Add the SQL editor and result panels in a resizable vertical split pane.
 	 */
-	private void addSqlEditorPanel() {
-		RTextScrollPane scrollPane = new RTextScrollPane(sqlEditor);
-		scrollPane.setLineNumbersEnabled(true);
-		scrollPane.setFoldIndicatorEnabled(true);
+	private void addEditorAndResultPanel() {
+		RTextScrollPane editorScrollPane = new RTextScrollPane(sqlEditor);
+		editorScrollPane.setLineNumbersEnabled(true);
+		editorScrollPane.setFoldIndicatorEnabled(true);
+		editorScrollPane.setMinimumSize(new Dimension(50, 50));
+
+		JScrollPane resultScrollPane = new JScrollPane(resultArea);
+		resultScrollPane.setMinimumSize(new Dimension(50, 50));
+
+		JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, editorScrollPane, resultScrollPane);
+		splitPane.setContinuousLayout(true);
+		splitPane.setResizeWeight(0.5);
+		splitPane.setOneTouchExpandable(true);
 
 		GridBagConstraints gbc = new GridBagConstraints();
-		gbc.weighty = 30.0;
+		gbc.weightx = 1.0;
+		gbc.weighty = 1.0;
 		gbc.fill = GridBagConstraints.BOTH;
 		gbc.insets = new Insets(0, 0, 5, 0);
 		gbc.gridx = 0;
 		gbc.gridy = 3;
-		add(scrollPane, gbc);
-	}
-
-	/**
-	 * Add the result display panel.
-	 */
-	private void addResultPanel() {
-		JScrollPane scrollPane = new JScrollPane(resultArea);
-
-		GridBagConstraints gbc = new GridBagConstraints();
-		gbc.weighty = 120.0;
-		gbc.fill = GridBagConstraints.BOTH;
-		gbc.insets = new Insets(0, 0, 5, 0);
-		gbc.gridx = 0;
-		gbc.gridy = 4;
-		add(scrollPane, gbc);
+		add(splitPane, gbc);
 	}
 
 	/**
@@ -468,7 +519,7 @@ public class SqlPanel extends JPanel {
 		gbc.anchor = GridBagConstraints.SOUTH;
 		gbc.fill = GridBagConstraints.HORIZONTAL;
 		gbc.gridx = 0;
-		gbc.gridy = 5;
+		gbc.gridy = 4;
 		add(panel, gbc);
 	}
 

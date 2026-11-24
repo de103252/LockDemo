@@ -6,6 +6,7 @@ import static java.sql.Types.DOUBLE;
 import static java.sql.Types.FLOAT;
 import static java.sql.Types.INTEGER;
 import static java.sql.Types.SMALLINT;
+import static java.util.function.Predicate.not;
 
 import java.beans.PropertyChangeListener;
 import java.sql.Connection;
@@ -20,6 +21,7 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.prefs.Preferences;
@@ -218,6 +220,17 @@ public class Executor {
 	}
 
 	/**
+	 * Upper limit for the padded width of a column. Some databases report huge
+	 * display sizes (H2 reports 1,000,000,000 for the VARCHAR columns of
+	 * INFORMATION_SCHEMA), and padding to that width would exhaust memory.
+	 */
+	private static final int MAX_COLUMN_WIDTH = 60;
+
+	private static int columnWidth(ResultSetMetaData rsmd, int i) throws SQLException {
+		return Math.min(MAX_COLUMN_WIDTH, Math.max(rsmd.getColumnDisplaySize(i), rsmd.getColumnLabel(i).length()));
+	}
+
+	/**
 	 * Return a string representation of the column value.
 	 *
 	 * @param rs
@@ -229,7 +242,7 @@ public class Executor {
 		try {
 			ResultSetMetaData rsmd = rs.getMetaData();
 			String align = NUMERIC_TYPES.contains(rsmd.getColumnType(i)) ? "" : "-";
-			int colWidth = Math.max(rsmd.getColumnDisplaySize(i), rsmd.getColumnLabel(i).length());
+			int colWidth = columnWidth(rsmd, i);
 			return String.format("%" + align + colWidth + "s", rs.getObject(i));
 		} catch (SQLException e) {
 			return e.toString();
@@ -275,7 +288,7 @@ public class Executor {
 		try {
 			ResultSetMetaData rsmd = rs.getMetaData();
 			String align = NUMERIC_TYPES.contains(rsmd.getColumnType(i)) ? "" : "-";
-			int colWidth = Math.max(rsmd.getColumnDisplaySize(i), rsmd.getColumnLabel(i).length());
+			int colWidth = columnWidth(rsmd, i);
 			return String.format("%" + align + colWidth + "s", rsmd.getColumnLabel(i));
 		} catch (SQLException e) {
 			return e.toString();
@@ -342,6 +355,17 @@ public class Executor {
 		}
 	}
 
+	private void closeStatement() {
+		try {
+			if (stmt != null) {
+				stmt.close();
+			}
+		} catch (SQLException ignored) {
+		} finally {
+			stmt = null;
+		}
+	}
+
 	public void commit() {
 		ex.submit(() -> commit0());
 	}
@@ -376,6 +400,11 @@ public class Executor {
 	public void disconnect() {
 		try {
 			connection.close();
+			// Closing the connection ended the transaction (if the database allows it);
+			// drop the state that belonged to it before notifying listeners.
+			setTransactionId(null);
+			closeStatement();
+			closeResultSet();
 			setConnection(null);
 		} catch (SQLException e) {
 			// If a tx is open, connection will not close. User must rollback first.
@@ -423,12 +452,15 @@ public class Executor {
 	}
 
 	private void executeOne(String sql) {
+		sql = sql.strip();
 		appendToResult(String.format("--- %tT -----------------------", Calendar.getInstance()));
 		appendToResult(sql);
+		// Already running on the executor thread: end the transaction synchronously so
+		// that it takes effect in script order.
 		if (sql.matches("(?i)commit(\\s+work)?")) {
-			commit();
+			commit0();
 		} else if (sql.matches("(?i)rollback(\\s+work)?")) {
-			rollback();
+			rollback0();
 		} else
 			try {
 				stmt = connection.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE);
@@ -722,7 +754,10 @@ public class Executor {
 	}
 
 	private List<String> split(String sqls) {
-		return Arrays.asList(sqls.split(";")).stream().filter((s) -> !s.trim().isEmpty()).collect(Collectors.toList());
+		return Arrays.asList(sqls.split(";"))
+		             .stream()
+					 .filter(not(String::isBlank))
+					 .collect(Collectors.toList());
 	}
 
 	private void sqlException(SQLException e) {
@@ -735,10 +770,11 @@ public class Executor {
 
 	private void update0() {
 		try {
-			pcs.firePropertyChange("busy", false, true);
+			pcs.firePropertyChange("busy", false, this.busy = true);
 			ResultSetMetaData rsmd = getResultSet().getMetaData();
-			for (int col = 1; col < rsmd.getColumnCount(); col++) {
-				if (rsmd.isDefinitelyWritable(col) && !rsmd.isAutoIncrement(col)) {
+			for (int col = 1; col <= rsmd.getColumnCount(); col++) {
+				// isDefinitelyWritable() is false for all columns with H2 and Derby
+				if (rsmd.isWritable(col) && !rsmd.isAutoIncrement(col)) {
 					getResultSet().updateObject(col, getResultSet().getObject(col));
 					getResultSet().updateRow();
 					break;
@@ -747,7 +783,7 @@ public class Executor {
 		} catch (SQLException e) {
 			appendToResult(e);
 		} finally {
-			pcs.firePropertyChange("busy", true, false);
+			pcs.firePropertyChange("busy", true, this.busy = false);
 		}
 	}
 }

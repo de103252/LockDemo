@@ -1,5 +1,10 @@
 package com.ibm.de103252.lockdemo;
 
+import com.formdev.flatlaf.FlatDarculaLaf;
+import com.formdev.flatlaf.FlatDarkLaf;
+import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.themes.FlatMacLightLaf;
+
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -316,7 +321,12 @@ public class LockDemo {
 	private void setLookAndFeel() {
 		Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
 		try {
-			UIManager.setLookAndFeel(new NimbusLookAndFeel());
+			FlatLightLaf.setup();
+			FlatLightLaf.installLafInfo();
+			FlatDarkLaf.installLafInfo();
+			FlatMacLightLaf.installLafInfo();
+			FlatDarculaLaf.installLafInfo();
+			if (false) UIManager.setLookAndFeel(new NimbusLookAndFeel());
 		} catch (UnsupportedLookAndFeelException e) {
 		}
 	}
@@ -440,11 +450,11 @@ public class LockDemo {
 		ButtonGroup themeGroup = new ButtonGroup();
 		for (LookAndFeelInfo laf: UIManager.getInstalledLookAndFeels()) {
 			JRadioButtonMenuItem lafItem = new JRadioButtonMenuItem(laf.getName());
-			lafItem.setAction(new AbstractAction(laf.getClassName()) {
+			lafItem.setAction(new AbstractAction(laf.getName()) {
 				@Override
 				public void actionPerformed(ActionEvent e) {
 					try {
-						UIManager.setLookAndFeel((LookAndFeel) Class.forName((String) getValue(AbstractAction.NAME)).newInstance());
+						UIManager.setLookAndFeel((LookAndFeel) Class.forName(laf.getClassName()).newInstance());
 						SwingUtilities.updateComponentTreeUI(frmDatabaseLockDemo);
 					} catch (IllegalAccessException | InstantiationException | ClassNotFoundException
 							| UnsupportedLookAndFeelException e1) {
