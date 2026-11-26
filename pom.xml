@@ -107,6 +107,10 @@
 			<groupId>com.formdev</groupId>
 			<artifactId>flatlaf</artifactId>
 			<version>3.8</version>
+			<!-- Same classes, but without the native libraries, which are only needed for
+				the FlatLaf window decorations. Avoids the JDK 24+ warning about
+				System.load. -->
+			<classifier>no-natives</classifier>
 			<scope>compile</scope>
 		</dependency>
 
