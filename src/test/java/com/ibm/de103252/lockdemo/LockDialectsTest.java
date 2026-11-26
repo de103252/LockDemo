@@ -14,9 +14,10 @@ class LockDialectsTest {
 
 	@Test
 	void selectsDialectByProductName() {
-		assertTrue(LockDialects.forProduct("DB2").orElseThrow() instanceof Db2Dialect);
-		assertTrue(LockDialects.forProduct("Apache Derby").orElseThrow() instanceof DerbyDialect);
-		assertTrue(LockDialects.forProduct("H2").orElseThrow() instanceof H2Dialect);
+		assertEquals("Db2Dialect", LockDialects.forProduct("DB2").orElseThrow().getClass().getSimpleName());
+		assertEquals("DerbyDialect",
+				LockDialects.forProduct("Apache Derby").orElseThrow().getClass().getSimpleName());
+		assertEquals("H2Dialect", LockDialects.forProduct("H2").orElseThrow().getClass().getSimpleName());
 	}
 
 	@Test
@@ -57,7 +58,7 @@ class LockDialectsTest {
 	 */
 	@Test
 	void db2QueryProvidesRendererColumns() {
-		String sql = new Db2Dialect().lockSql().toUpperCase();
+		String sql = LockDialects.forProduct("DB2").orElseThrow().lockSql().toUpperCase();
 		for (String column : new String[] { " LUWID", " STATE", " OBJECT" }) {
 			assertTrue(sql.contains(column), "missing column " + column);
 		}
