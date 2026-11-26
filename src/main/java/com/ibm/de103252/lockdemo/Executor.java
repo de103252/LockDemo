@@ -31,6 +31,13 @@ import javax.swing.event.SwingPropertyChangeSupport;
 
 public class Executor {
 	//@formatter:off
+	/**
+	 * Db2: retrieves an identifier for the current transaction without a
+	 * transaction table. The first column is a constant; the second column is the
+	 * part of the special register CURRENT CLIENT_CORR_TOKEN that follows its fifth
+	 * period (the LUW identifier part), which is meant to match the LUWID column of
+	 * {@link #LOCK_SQL_DB2}. Executed against SYSIBM.SYSDUMMYU.
+	 */
 	private static final String getXidDb2 = """
 			select 42, substr(CURRENT CLIENT_CORR_TOKEN,
 			               locate_in_string(CURRENT CLIENT_CORR_TOKEN, '.', 1, 5) + 1)
@@ -48,6 +55,9 @@ public class Executor {
 	/**
 	 * Derby: the statement text itself starts with the thread id, so that the
 	 * transaction can be found in SYSCS_DIAG.TRANSACTION_TABLE by its SQL_TEXT.
+	 * The id is substituted via {@link String#formatted}; the doubled percent sign
+	 * is the escaped LIKE wildcard. The second column is the XID, matching the XID
+	 * column of {@link #LOCK_SQL_DERBY}.
 	 */
 	private static final String getXidDerby = """
 			select %1$d as rnd, xid
@@ -55,6 +65,27 @@ public class Executor {
 			 where sql_text like 'select %1$d%%'
 			""".formatted(Thread.currentThread().getId());
 
+	/**
+	 * Lock monitoring for Db2 for z/OS.
+	 * <p>
+	 * Reads the locks held or awaited by the current authorization id from the
+	 * table function {@code blocking_threads}. The coded columns SUBTYPE, DURATION
+	 * and STATE are decoded into readable text:
+	 * <ul>
+	 * <li>SUBTYPE: the kind of resource that is locked (page, row, table, claim,
+	 * ...).</li>
+	 * <li>DURATION: how long the lock is held (for example Commit, Plan or
+	 * Allocation).</li>
+	 * <li>STATE: the lock mode (for example IS, IX, S, U, X).</li>
+	 * </ul>
+	 * Rows are restricted to the current SQLID, to locks on a named object
+	 * (OBJECT_QUALIFIER not null), and to user databases (system databases
+	 * DSNDB* are excluded). OBJECT is the trimmed qualified name, CAST to a
+	 * bounded VARCHAR so that {@link #colToString} pads it to a sensible width.
+	 * <p>
+	 * The LUWID column is the transaction identifier, which
+	 * {@link LockStateRenderer} locates by name.
+	 */
 	private static final String LOCK_SQL_DB2 = """
 			select ACQUIRED_TS
 			     , CAST(LUWID AS CHAR(30)) LUWID
@@ -125,6 +156,17 @@ public class Executor {
 			   and dbname not like 'DSNDB%'
 			""";
 
+	/**
+	 * SQL query to retrieve lock information from Apache Derby's diagnostic tables.
+	 * Joins LOCK_TABLE with TRANSACTION_TABLE to show lock details along with
+	 * transaction status and the SQL text that acquired each lock.
+	 * <p>
+	 * The join column XID identifies the transaction; locks of transactions that
+	 * are no longer in the transaction table are not shown. TABLENAME is truncated
+	 * to 16 characters to keep the display narrow. Rows are ordered by transaction,
+	 * then table locks before row locks (other lock types last), then by table
+	 * name and lock name, and finally by lock mode in descending order.
+	 */
 	private static final String LOCK_SQL_DERBY = """
 			SELECT L.XID
 			     , L.TYPE
@@ -211,7 +253,11 @@ public class Executor {
 	//@formatter:on
 
 	private final Logger LOGGER;
-
+	/**
+	 * A list of SQL numeric type codes used to determine column alignment when
+	 * formatting result set output. Numeric columns are right-aligned; all other
+	 * columns are left-aligned.
+	 */
 	private static final List<Integer> NUMERIC_TYPES = Arrays.asList(DECIMAL, DOUBLE, FLOAT, INTEGER, SMALLINT, BIGINT);
 
 	public Executor(boolean left) {
@@ -225,6 +271,17 @@ public class Executor {
 	 */
 	private static final int MAX_COLUMN_WIDTH = 60;
 
+	/**
+	 * Returns the display width for a result set column, capped at
+	 * {@link #MAX_COLUMN_WIDTH}. The width is the larger of the database-reported
+	 * display size and the length of the column label, so that the header is never
+	 * wider than the column.
+	 *
+	 * @param rsmd the result set metadata
+	 * @param i    the 1-based column index
+	 * @return the display width to use for formatting
+	 * @throws SQLException if the metadata cannot be read
+	 */
 	private static int columnWidth(ResultSetMetaData rsmd, int i) throws SQLException {
 		return Math.min(MAX_COLUMN_WIDTH, Math.max(rsmd.getColumnDisplaySize(i), rsmd.getColumnLabel(i).length()));
 	}
