@@ -223,7 +223,7 @@ public final class LockDialects {
 				select %1$d as rnd, xid
 				  from SYSCS_DIAG.TRANSACTION_TABLE
 				 where sql_text like 'select %1$d%%'
-				""".formatted(Thread.currentThread().getId());
+				""".formatted(Thread.currentThread().threadId());
 
 		@Override
 		public boolean supports(String productName) {
