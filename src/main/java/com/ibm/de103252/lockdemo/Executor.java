@@ -19,6 +19,7 @@ import java.sql.SQLWarning;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -130,8 +131,8 @@ public class Executor {
 
 	private boolean busy;
 	private Connection connection;
-	/** The database specific SQL for the current connection, or null if unsupported. */
-	private volatile LockDialect dialect;
+	/** The database specific SQL for the current connection, empty if unsupported. */
+	private volatile Optional<LockDialect> dialect = Optional.empty();
 	private final ExecutorService ex = Executors.newSingleThreadExecutor();
 	private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this);
 
@@ -213,7 +214,7 @@ public class Executor {
 			// The dialect must be known before listeners are told about the connection:
 			// they ask for the lock SQL. It is created here, on the executor thread, so
 			// that a dialect that depends on the thread gets a thread of its own.
-			dialect = LockDialects.forProduct(conn.getMetaData().getDatabaseProductName()).orElse(null);
+			dialect = LockDialects.forProduct(conn.getMetaData().getDatabaseProductName());
 			setConnection(conn);
 			Preferences prefs = Preferences.userRoot().node(LockDemo.class.getName());
 			prefs.put("url", url);
@@ -358,7 +359,7 @@ public class Executor {
 	 *         not supported
 	 */
 	public String getLockSQL() {
-		return dialect == null ? null : dialect.lockSql();
+		return dialect.map(LockDialect::lockSql).orElse(null);
 	}
 
 	public String getResult() {
@@ -447,10 +448,11 @@ public class Executor {
 	 *         identifier could not be retrieved.
 	 */
 	private String retrieveCurrentXid() {
-		if (dialect == null) {
+		Optional<String> xidSql = dialect.map(LockDialect::transactionIdSql);
+		if (xidSql.isEmpty()) {
 			return "(no Xid)";
 		}
-		try (PreparedStatement ps = getConnection().prepareStatement(dialect.transactionIdSql())) {
+		try (PreparedStatement ps = getConnection().prepareStatement(xidSql.get())) {
 			try (ResultSet rs = ps.executeQuery()) {
 				rs.next();
 				return rs.getString(2);
