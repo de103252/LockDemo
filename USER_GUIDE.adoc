@@ -1,0 +1,1524 @@
+= LockDemo User's Guide
+:toc: left
+:toclevels: 3
+:sectnums:
+:experimental:
+:icons: font
+:source-highlighter: rouge
+:revdate: November 2026
+:description: User's guide for LockDemo, a tool for demonstrating database locking with Apache Derby, H2 and Db2 for z/OS.
+
+[[introduction]]
+== Introduction
+
+=== What is LockDemo?
+
+LockDemo is an educational and testing tool that demonstrates database locking in relational database management systems (RDBMS).
+It connects twice to a database, so that you can run SQL statements on two independent connections, watch the locks that these transactions hold, and see how isolation levels influence blocking, deadlocks and anomalies such as dirty reads.
+
+LockDemo supports *Apache Derby* and *H2*, each either *embedded* in the application or running as a *server*.
+It also supports *Db2 for z/OS* when you add the Db2 JDBC driver.
+
+[[two-approaches]]
+=== Two approaches to isolation: locking and MVCC
+
+LockDemo is especially useful to compare the two common ways in which a database implements transaction isolation:
+
+[cols="1,2,2"]
+|===
+| |Locking (Derby, Db2) |MVCC (H2)
+
+|Readers and writers |Readers take shared locks, so they can block writers and be blocked by them. |Readers see a consistent committed version of the data, so they never block writers and are never blocked by them.
+|What you see in the lock display |Row and table locks (`S`, `X`, `U`, `IS`, `IX`) and `WAIT` rows for blocked statements. |Table locks only, and `WAIT` rows when two writers collide.
+|Effect of the isolation level |A higher level holds more locks for longer, so more statements block. |A higher level changes which version of the data a statement sees. Little blocks.
+|Typical conflicts |Reader against writer, writer against writer, deadlocks. |Writer against writer, deadlocks.
+|===
+
+Run the same scenario on Derby and on H2 and compare the result area and the lock display.
+For example, an uncommitted `UPDATE` on the left makes a `SELECT` on the right wait on Derby at Read committed, whereas on H2 the `SELECT` returns the old value immediately.
+See <<h2-differences>> and <<common-scenarios>>.
+
+=== Who should use this tool?
+
+* *Database administrators*: explore the locking behavior of a database system before you meet it in a real workload.
+* *Developers*: learn how transaction isolation and concurrency control work.
+* *Students*: use it as a hands-on companion for database courses.
+* *QA engineers*: reproduce concurrent access patterns.
+
+=== Key benefits
+
+* *Visual feedback*: locks are shown in real time, color-coded by lock mode and conflict state.
+* *Dual connections*: simulate two concurrent users in one window.
+* *Locking versus MVCC*: compare a lock-based database (Derby) with a multi-version database (H2) side by side, see <<two-approaches>>.
+* *Multiple databases*: works out of the box with Apache Derby and H2, both embedded or as a server, and with Db2 for z/OS when the Db2 JDBC driver is available.
+* *Script management*: open, edit and save SQL scripts that describe a test scenario.
+* *SQL editor*: syntax highlighting, line numbers, code folding and auto-completion.
+
+'''
+
+[[getting-started]]
+== Getting started
+
+[[system-requirements]]
+=== System requirements
+
+[cols="1,3"]
+|===
+|Java |*JRE or JDK 21 or higher.* The application is compiled for Java 21 (`pom.xml`), so Java 11 and 17 cannot run it.
+|Memory |512 MB RAM or more
+|Operating system |Windows, macOS or Linux (a graphical desktop is required, because the user interface is built with Swing)
+|Databases |Apache Derby (embedded and network client driver included), H2 (included, embedded or TCP client), Db2 for z/OS (the Db2 JDBC driver is not included)
+|Build (optional) |Maven and a JDK 21 to build from source
+|===
+
+NOTE: LockDemo depends on Apache Derby 10.15 or later without an upper bound, and Maven resolves this to 10.17.1.0, which requires Java 21.
+The Apache Derby project was retired on 10 October 2025, so 10.17.1.0 is the last Derby release.
+
+=== Installation
+
+. *Build* the application with `mvn clean package`.
+This creates `target/lockdemo.jar` with all dependencies included.
+. *Verify Java*: run `java -version` and make sure that it reports version 21 or higher.
+. *Launch* the application by double-clicking `lockdemo.jar` or by running:
++
+[source,bash]
+----
+java -jar target/lockdemo.jar
+----
+
+To use Db2, see <<troubleshooting-db2>>.
+
+=== First launch
+
+When you start LockDemo for the first time:
+
+. *Two panels*: the left and the right SQL panel are disconnected.
+. *Default URLs*: the URL drop-down of each panel offers these entries:
++
+--
+* `jdbc:derby:memory:derbyDB;create=true` (embedded in-memory Derby, selected by default)
+* `jdbc:derby:derbyDB;create=true` (embedded Derby on disk)
+* `jdbc:derby://localhost:1527/DBIDB` (Derby network server)
+* `jdbc:h2:mem:lockdemo;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=60000` (shared in-memory H2)
+--
+. *No setup needed*: select an embedded URL, click *Connect* in both panels, and you can start testing.
+
+NOTE: The URLs that you connect with are remembered in the Java user preferences.
+Once URLs are saved, the built-in defaults are no longer added to the list.
+You can always type or paste any JDBC URL into the editable drop-down.
+
+'''
+
+[[user-interface]]
+== User interface overview
+
+=== Main window layout
+
+The LockDemo window has three main sections: the two SQL panels at the top, and the lock display at the bottom.
+The divider between the SQL panels and the lock display can be dragged.
+
+....
+┌─────────────────────────────────────────────────────────┐
+│  File (Left)   File (Right)   Theme                     │
+├────────────────────────────┬────────────────────────────┤
+│                            │                            │
+│   Left SQL panel           │    Right SQL panel         │
+│   (Connection 1)           │    (Connection 2)          │
+│                            │                            │
+├────────────────────────────┴────────────────────────────┤
+│                                                         │
+│   Lock display                                          │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+....
+
+=== SQL panel components
+
+Each SQL panel contains, from top to bottom:
+
+. *Connection controls*
+* JDBC URL drop-down (editable, with history)
+* *Connect* / *Disconnect* button
+. *Status label*, which shows the state of the connection (see <<status-label>>)
+. *Isolation* drop-down (shortcut kbd:[Alt+I]) for the isolation level of the next transaction
+. *SQL editor* (upper part of a split pane)
+* Syntax highlighting, line numbers, code folding
+* Auto-completion (kbd:[Ctrl+Space]) and SQL formatting (kbd:[Ctrl+Shift+F])
+. *Result area* (lower part of the split pane)
+* Shows statements, result rows, update counts and error messages as monospaced text
+* Context menu *Clear* or kbd:[Ctrl+L] empties it
+. *Button row*
+* *Execute*, *Next*, *Commit*, *Update* and *Rollback*
+
+TIP: The editor and the result area are separated by a divider that you can drag.
+
+[[status-label]]
+==== Status label
+
+[cols="1,1,3"]
+|===
+|Text |Color |Meaning
+
+|`Disconnected` |Gray |No connection.
+|`Connected` |Green |Connected, no transaction is open.
+|`In Tx: <id>` |Yellow |A transaction is open. The identifier is the transaction ID that also appears in the XID column of the lock display.
+|`Busy: <id>` |Red |A statement is running or waiting, for example for a lock. All buttons of this panel are disabled until it finishes.
+|===
+
+[[lock-display]]
+=== Lock display
+
+The bottom panel is a table with the locks of the database, refreshed automatically every 250 ms.
+
+* The rows are *color-coded* (see <<color-coding>>).
+* The *columns depend on the database* (see <<lock-columns>>).
+* The display runs on its own database connection, which LockDemo opens with the URL of the *left* panel.
+It appears when the left panel connects and is closed when the left panel disconnects.
+Connect the left panel first, even if you only want to work with the right one.
+
+NOTE: There is no color legend in the window. The colors are explained in <<color-coding>>.
+
+=== Menu bar
+
+[cols="1,2"]
+|===
+|Menu |Items
+
+|*File (Left)* (kbd:[Alt+L]) |New (kbd:[Ctrl+N]), Open... (kbd:[Ctrl+O]), Save (kbd:[Ctrl+S]), Save As... (kbd:[Ctrl+Shift+S]), Exit
+|*File (Right)* (kbd:[Alt+R]) |New (kbd:[Ctrl+Alt+N]), Open... (kbd:[Ctrl+Alt+O]), Save (kbd:[Ctrl+Alt+S]), Save As... (kbd:[Ctrl+Alt+Shift+S]), Exit
+|*Theme* (kbd:[Alt+T]) |One entry per installed look and feel, see <<themes>>
+|===
+
+'''
+
+[[core-features]]
+== Core features
+
+=== Database connections
+
+==== Connecting to a database
+
+Derby and H2 can each be used in two ways:
+
+[cols="1,2,2"]
+|===
+| |Embedded |Server
+
+|Derby |The database runs inside the LockDemo process. Nothing to install. |A Derby network server must be running. LockDemo contains the client driver only.
+|H2 |The database runs inside the LockDemo process. Nothing to install. |An H2 TCP server must be running. LockDemo contains the H2 driver, which also works as client.
+|===
+
+With an embedded database, both panels share one database inside the same Java process, and an in-memory database disappears when you close LockDemo.
+With a server, several clients, including other applications, can work with the same database at the same time.
+
+*Derby (embedded):*
+
+----
+jdbc:derby:memory:derbyDB;create=true
+jdbc:derby:derbyDB;create=true
+----
+
+*Derby (network server):*
+
+----
+jdbc:derby://localhost:1527/DBIDB
+----
+
+*H2 (embedded, shared in-memory):*
+
+----
+jdbc:h2:mem:lockdemo;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=60000
+----
+
+*H2 (embedded file, or server):*
+
+----
+jdbc:h2:file:./h2/lockdemo;LOCK_TIMEOUT=60000
+jdbc:h2:tcp://localhost/~/lockdemo
+----
+
+For H2, connect both panels to the *same named* database.
+Add `;USER=...;PASSWORD=...` to the URL if the database was created with credentials.
+See <<h2-differences>>.
+
+*Db2 for z/OS:*
+
+----
+jdbc:db2://hostname:port/location
+----
+
+*Steps:*
+
+. Select or enter a JDBC URL in the drop-down.
+. Click *Connect*.
+. Wait for the status `Connected`.
+. Repeat for the second panel.
+
+==== Connection management
+
+* *Independent connections*: each panel has its own connection and its own transaction.
+* *Connection history*: used URLs are saved in the drop-down.
+* *Disconnect*: click the button again, which now reads *Disconnect*.
+Derby refuses to close a connection with an open transaction, so commit or roll back first.
+* *Auto-reconnect*: not available. Connect manually again.
+* *Auto-commit is always off*: LockDemo turns it off on every connection, so a transaction stays open until you commit or roll back.
+
+=== Transaction control
+
+==== Isolation levels
+
+Choose from the four standard JDBC isolation levels:
+
+[cols="2,3,3"]
+|===
+|Level |Description |Typical use
+
+|*Read uncommitted* |Lowest isolation, allows dirty reads |Maximum concurrency, reporting
+|*Read committed* |Prevents dirty reads |Default of most applications and of all supported databases
+|*Repeatable Read* |Prevents dirty and non-repeatable reads |Financial transactions
+|*Serializable* |Highest isolation, also prevents phantom reads |Critical operations
+|===
+
+*To change the isolation level:*
+
+. Select the level in the *Isolation* drop-down. It is enabled only while the panel is connected and *no transaction is open*.
+. LockDemo sets the level on the connection when you click *Execute*, so it applies to the transaction that this statement starts.
+. After a commit or rollback you can select another level.
+
+NOTE: Derby uses its own names for the levels. The mapping is: Read uncommitted = `UR`, Read committed = `CS`, Repeatable Read = `RS`, Serializable = `RR`.
+Db2 uses the same abbreviations.
+You can also override the level for a single statement with `WITH UR`, `WITH CS`, `WITH RS` or `WITH RR` on Derby and Db2.
+H2 has no such clause, so use the drop-down.
+
+[[manual-transaction-control]]
+==== Manual transaction control
+
+There is no `BEGIN` statement: the first statement that you run on a connection starts a transaction.
+
+*Commit* (kbd:[Alt+3] left, kbd:[Alt+8] right):
+
+* Releases all locks held by the transaction
+* Makes the changes permanent
+
+*Rollback* (kbd:[Alt+5] left, kbd:[Alt+0] right):
+
+* Releases all locks
+* Undoes all changes since the last commit
+
+TIP: A `COMMIT` or `ROLLBACK` statement in the editor has the same effect as the buttons.
+This allows you to put a whole scenario, including the commits, into one script.
+
+IMPORTANT: If a statement fails, LockDemo *rolls back the transaction* of that panel automatically and releases its locks.
+This also happens when the database aborts a statement, for example as a deadlock victim.
+
+=== SQL execution
+
+==== Writing SQL
+
+The SQL editor supports:
+
+* *Multi-line statements*
+* *Multiple statements*, separated by semicolons
+* *Comments*: `-- line comment` and `+/* block comment */+`
+* Lines that consist only of a `--` comment are skipped when you execute
+
+WARNING: LockDemo splits the selected text at every semicolon.
+A semicolon inside a string literal or a comment therefore cuts a statement in two.
+
+==== Syntax highlighting
+
+The editor highlights keywords, strings, comments and numbers.
+The colors come from the RSyntaxTextArea theme `default` or `dark`, which LockDemo selects to match the current look and feel.
+
+==== Code folding
+
+Click the fold indicator in the gutter to collapse a block.
+The following regions can be folded:
+
+* `BEGIN` ... `END` blocks
+* `CASE`, `IF`, `LOOP`, `WHILE` and `REPEAT` blocks
+* Individual statements that begin with `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `ALTER`, `DROP`, `GRANT`, `REVOKE`, `WITH`, `MERGE` or `CALL`
+* Multi-line comments
+
+==== Auto-completion
+
+*Activation:*
+
+* Press kbd:[Ctrl+Space], or
+* Type and wait for one second; the suggestion list then opens automatically.
+
+*Available completions* are 75 SQL keywords, offered in lower case, for example `select`, `from`, `where`, `join`, `group`, `order`, `commit`, `rollback`, `lock`, `nowait`.
+
+NOTE: Auto-completion is installed when a panel connects, so it is not active in a disconnected panel.
+
+[[sql-formatting]]
+==== SQL formatting
+
+Press kbd:[Ctrl+Shift+F] to run the built-in formatter on the *whole* editor text.
+
+WARNING: The formatter currently collapses *all* whitespace, including line breaks, into single blanks.
+It inserts line breaks before keywords such as `SELECT`, `FROM` and `WHERE` first, but then removes them again in the next step, so the result is a single line.
+For a script with `--` comments this changes the meaning, because everything after the comment marker ends up on the same line.
+Do not use it on scripts that you want to keep, or press kbd:[Ctrl+Z] to undo it.
+
+==== Executing SQL
+
+*Methods:*
+
+. Select the statement or statements in the editor, then click *Execute*.
+. Use the keyboard shortcut: kbd:[Alt+1] (left panel) or kbd:[Alt+6] (right panel).
+
+IMPORTANT: LockDemo executes the *selected text* only, not the whole editor content and not the current line.
+*Execute* stays disabled while nothing is selected or the panel is disconnected.
+This is what makes it possible to keep a whole two-sided scenario in one script and to run it piece by piece.
+
+*Behavior:*
+
+* Every executed statement is echoed to the result area with a time stamp.
+* Several selected statements are executed one after the other.
+* *Errors* are displayed in the result area. The transaction is rolled back (see <<manual-transaction-control>>) and the remaining selected statements are still run.
+* If a statement has to wait for a lock, the panel turns red (`Busy`) until the lock is granted, the statement times out, or the database reports a deadlock.
+The other panel stays usable; this is how you resolve a blocked situation: switch to the other panel and commit or roll back.
+
+==== Viewing results
+
+*Query results:*
+
+* Results are displayed as monospaced text in the result area, not in a grid.
+* The header row shows the column labels. Numbers are right-aligned and other values are left-aligned.
+* A query does *not* fetch all rows. Each click on *Next* (kbd:[Alt+2] left, kbd:[Alt+7] right) fetches and shows one more row, which lets you observe exactly when row locks are acquired.
+* When the last row has been read, `-- End of result set` is shown and the cursor is closed.
+* For statements that do not return rows, the number of affected rows is shown.
+
+*Update row* (kbd:[Alt+4] left, kbd:[Alt+9] right):
+
+* Enabled after you have fetched a row with *Next*.
+* Writes the *current value of the first updatable column* of the current row back to the row. It does not change data.
+* It acquires a write lock on the row and, with a `FOR UPDATE` cursor, converts the update lock into an exclusive lock.
+Use it to demonstrate lock upgrades, see <<scenario-for-update>>.
+* The button only works with updatable result sets, such as `SELECT ... FROM table`, and not with aggregates or joins.
+
+'''
+
+[[lock-monitoring]]
+== Lock monitoring
+
+=== Understanding the lock display
+
+[[lock-columns]]
+==== Columns
+
+The query that fills the lock display is database specific, so the columns differ.
+The renderer finds the columns by name: `XID` or `LUWID`, `MODE`, `STATE`, `STATUS`, `TABLENAME` or `OBJECT`, and `LOCKNAME`, `RID` or `PAGENUM`.
+
+*Derby:*
+
+[cols="1,3"]
+|===
+|Column |Meaning
+
+|`XID` |Transaction identifier. It is the same value as in the status label.
+|`TYPE` |`TABLE` or `ROW`
+|`MODE` |Lock mode, such as `S`, `X`, `IS`, `IX`, `U`
+|`TABLENAME` |Table that is locked (first 16 characters)
+|`LOCKNAME` |Identifier of the locked row or table
+|`STATE` |`GRANT` or `WAIT`
+|`TABLETYPE`, `LOCKCOUNT`, `INDEXNAME` |Further details from `SYSCS_DIAG.LOCK_TABLE`
+|`STATUS` |Transaction status, for example `ACTIVE` or `IDLE`
+|`FIRST_INSTANT` |Log instant of the transaction's first log record
+|`SQL_TEXT` |Statement that the transaction is running
+|===
+
+*H2:* `XID`, `TYPE`, `MODE`, `TABLENAME`, `LOCKNAME`, `STATE`, `STATUS` and `SQL_TEXT`, see <<h2-differences>>.
+
+*Db2 for z/OS:* `ACQUIRED_TS`, `LUWID`, `SSID`, `SUBTYPE` (lock type such as row lock or page lock), `DURATION`, `STATE` (the lock state, for example `IS`, `IX`, `S`, `U`, `SIX`, `X`), `DBNAME`, `OBJECT` and `PAGENUM_OR_RID`.
+The data comes from the `BLOCKING_THREADS` table function and is limited to the current SQL ID and to non-catalog databases (`DSNDB%` is excluded).
+
+==== Lock modes
+
+[cols="1,2,4"]
+|===
+|Mode |Name |Description
+
+|*S* |Shared |Read lock. Several transactions can hold it at the same time.
+|*X* |Exclusive |Write lock. Blocks all other access.
+|*IS* |Intent Shared |Held on a table to announce that S locks are taken on rows or pages.
+|*IX* |Intent Exclusive |Held on a table to announce that X locks are taken on rows or pages.
+|*SIX* |Shared with Intent Exclusive |S lock on the whole object plus the intent to take X locks on parts of it.
+|*U* |Update |Taken by update cursors (`FOR UPDATE`). It prevents the typical lock-conversion deadlock, because only one transaction at a time can hold it. See <<appendix-c>> for how it interacts with `S`.
+|===
+
+See <<appendix-c>> for the compatibility matrix.
+
+[[color-coding]]
+==== Color-coded highlighting
+
+The rows of the lock display are colored as follows, in this order of precedence:
+
+[cols="1,3"]
+|===
+|Color |Meaning
+
+|*Orange* (waiting) |The `STATE` is `WAIT`. This transaction is blocked and waits for the lock.
+|*Red* (conflict) |Another row is waiting for the *same resource* (same table and lock name). The row shows the lock that other transactions are waiting for.
+|*Light red* (exclusive) |Mode `X`. The transaction holds an exclusive lock; this is normal for `UPDATE`, `INSERT` and `DELETE`.
+|*Pale pink* (intent exclusive) |Mode `IX`.
+|*Green* (shared) |Mode `S`. Normal for reads at higher isolation levels.
+|*Pale green* (intent shared) |Mode `IS`.
+|*Blue-violet* (update) |Mode `U`.
+|*No color* |Any other mode.
+|===
+
+TIP: Orange rows tell you *who is waiting*; red rows tell you *whom they are waiting for*.
+
+[[h2-differences]]
+=== H2 differences
+
+H2 uses multi-version concurrency control (MVCC), so the lock display differs from Derby and Db2:
+
+* Only *table locks* are shown. `X` means a write lock, `IX` a session with uncommitted changes, and `IS` a session that only reads. There are no row locks.
+* A statement that waits for another session is shown as a *WAIT* (orange) row on the table that the blocking session locks.
+When the blocker commits or rolls back, the waiting statement continues, or it fails after `LOCK_TIMEOUT` milliseconds.
+* Readers do not block writers, so most Derby and Db2 scenarios that rely on shared locks (for example dirty-read protection at Read committed, or Repeatable Read) do not block on H2.
+Write/write conflicts and deadlocks do.
+* The transaction ID (`XID`) is the H2 session ID.
+* The lock display needs the user that created the database, because H2 shows other sessions only to administrators.
+Both panels must use the same credentials.
+* H2 has no `WITH UR/CS/RS/RR` clause. Use the *Isolation* drop-down.
+* The default `LOCK_TIMEOUT` of H2 is two seconds. The default URL sets 60000 ms, which is similar to Derby's default, so blocked statements stay visible long enough to observe them.
+* Example scripts are in `Scripts/H2`.
+
+=== Real-time updates
+
+* *Refresh rate*: 250 ms (four times per second)
+* *Automatic*: no manual refresh needed
+* *Not configurable*: the interval is a constant in the source code (`LOCK_UPDATE_INTERVAL_MS`)
+
+'''
+
+[[advanced-features]]
+== Advanced features
+
+=== Script management
+
+Each panel has its own script, its own file name and its own change tracking.
+Use the *File (Left)* menu for the left panel and the *File (Right)* menu for the right panel.
+
+==== Creating scripts
+
+*New script:*
+
+. *File > New* (kbd:[Ctrl+N] left, kbd:[Ctrl+Alt+N] right)
+. If the current script has unsaved changes, LockDemo asks whether to save it first.
+. The editor is cleared.
+
+*Writing scripts:* a script is plain SQL.
+Because only the selected text is executed, one script can contain statements for both sides of a scenario.
+By convention, the sample scripts mark the side in a comment (`/* L */`, `/* R */`):
+
+[source,sql]
+----
+-- Left: acquire an exclusive row lock
+/* L */ UPDATE emp SET salary = salary + 200 WHERE eid = 103;
+-- Right: try to update the same row, this statement waits
+/* R */ UPDATE emp SET salary = salary + 300 WHERE eid = 103;
+-- Left: release the lock, the right statement continues
+/* L */ COMMIT;
+/* R */ COMMIT;
+----
+
+==== Saving scripts
+
+*Save* (kbd:[Ctrl+S] left, kbd:[Ctrl+Alt+S] right):
+
+* Saves to the current file.
+* If the script has no file yet, it behaves like *Save As*.
+
+*Save As* (kbd:[Ctrl+Shift+S] left, kbd:[Ctrl+Alt+Shift+S] right):
+
+* Always asks for a file name.
+* If you enter a name without one of the supported extensions, `.sql` is added.
+* Asks for confirmation before it overwrites an existing file.
+
+*Supported extensions:*
+
+* `.sql`: standard SQL scripts
+* `.ddl`: data definition language
+* `.dml`: data manipulation language
+
+Files are read and written as UTF-8.
+
+==== Loading scripts
+
+*Open script:*
+
+. *File > Open...* (kbd:[Ctrl+O] left, kbd:[Ctrl+Alt+O] right)
+. Browse to the script file.
+. Select it and click *Open*.
+. The script loads into the editor of that panel.
+
+The last used directory is remembered between sessions.
+
+==== Unsaved changes protection
+
+LockDemo compares the editor content with the content that it last loaded or saved.
+If they differ, it asks *Do you want to save before ...?* with the options *Yes*, *No* and *Cancel* before you create a new script or open another one.
+
+NOTE: There is no modified marker in the window title and no prompt when you close the window or choose *Exit*.
+Save your scripts before you exit.
+
+==== Sample scripts
+
+The `Scripts` directory contains scenarios that you can open with *File > Open...*:
+
+[cols="1,3"]
+|===
+|Directory |Content
+
+|`Scripts/Derby` |`00 Setup.sql` creates the sample tables `dept` and `emp`. `01 Demo.sql` contains exercises for isolation levels, deadlocks and lock escalation (comments in German). `03 Persons.sql` inserts rows into a `person` table for the lock escalation demo.
+|`Scripts/H2` |`00 Setup.sql` creates the same HR sample tables with fewer rows. `01 Demo.sql` contains a dirty-read, a write/write conflict and a deadlock scenario that are valid on H2.
+|`Scripts/Db2` |Sample scripts for Db2 for z/OS.
+|===
+
+Run the `00 Setup.sql` of your database once, then commit.
+
+[[themes]]
+=== Themes
+
+==== Available themes
+
+The *Theme* menu lists every look and feel that the Java runtime knows.
+These are the FlatLaf themes that LockDemo installs:
+
+* *FlatLaf Light* (the default at startup)
+* *FlatLaf Dark*
+* *FlatLaf Darcula*
+* *FlatLaf macOS Light*
+
+In addition, the look and feels of the JDK itself appear, for example *Metal*, *Nimbus* and *CDE/Motif*, and on Windows also *Windows* and *Windows Classic*.
+
+==== Changing themes
+
+. Open *Theme*.
+. Select the desired entry.
+. The window updates immediately, and the editor switches between a light and a dark syntax theme to match.
+
+NOTE: The selection is *not* saved. LockDemo starts with *FlatLaf Light* every time.
+
+=== SQL editor enhancements
+
+==== Line numbers
+
+Line numbers are always shown in the gutter on the left side of the editor.
+
+==== Find and replace
+
+There is no find or replace dialog in the editor.
+
+==== Undo and redo
+
+* *Undo*: kbd:[Ctrl+Z]
+* *Redo*: kbd:[Ctrl+Y]
+* The history is kept within the current session and is lost when you open another script.
+
+==== Result area
+
+* *Clear*: right-click and choose *Clear*, or press kbd:[Ctrl+L] while the focus is anywhere in the panel.
+* The area is read-only. Select text with the mouse and press kbd:[Ctrl+C] to copy it.
+
+'''
+
+[[common-scenarios]]
+== Common scenarios
+
+The scenarios use the `emp` and `dept` tables from the `00 Setup.sql` scripts.
+Run that script first and commit.
+There is no `BEGIN` in the examples, because LockDemo starts a transaction implicitly.
+For every step, select the statement in the editor of the indicated panel and click *Execute*.
+
+IMPORTANT: Derby and Db2 lock readers, whereas H2 does not.
+The expected behavior is therefore described for each database where it differs.
+
+=== Scenario 1: Dirty reads and Read committed
+
+*Objective:* show what a reader sees while another transaction has uncommitted changes.
+
+*Setup:* connect both panels to the same database.
+Set the right panel to *Read committed* (and later to *Read uncommitted*).
+
+*Left panel:*
+
+[source,sql]
+----
+UPDATE emp SET salary = salary + 200 WHERE eid = 103;
+-- Do not commit yet
+----
+
+*Right panel:*
+
+[source,sql]
+----
+SELECT salary FROM emp WHERE eid = 103;
+----
+
+*Observation:*
+
+* *Read committed on Derby or Db2*: the right panel turns red (`Busy`) and waits. The lock display shows an orange `WAIT` row for the right transaction and a red row for the left one.
+Dirty reads are prevented *by blocking*.
+* *Read committed on H2*: the right panel shows the old value at once, because H2 serves the last committed version of the row.
+* *Read uncommitted* (set when the panel is not in a transaction): the right panel returns the changed, uncommitted value immediately on all databases.
+
+*Left panel:*
+
+[source,sql]
+----
+ROLLBACK;
+----
+
+The blocked right statement now completes and returns the original value.
+Roll back the right panel, too.
+
+=== Scenario 2: Write/write conflict
+
+*Objective:* observe a lock wait between two writers.
+This scenario behaves the same way on all databases.
+
+*Left panel:*
+
+[source,sql]
+----
+UPDATE emp SET salary = salary + 200 WHERE eid = 103;
+----
+
+*Right panel:*
+
+[source,sql]
+----
+UPDATE emp SET salary = salary + 300 WHERE eid = 103;
+----
+
+*Observation:* the right panel waits.
+The lock display shows the `X` lock of the left transaction and an orange `WAIT` row for the right one.
+
+*Left panel:*
+
+[source,sql]
+----
+COMMIT;
+----
+
+The right update now runs.
+Commit the right panel, too.
+If you do not commit the left side, the waiting statement fails when the lock timeout expires (60 seconds on Derby by default, and with the default H2 URL).
+
+=== Scenario 3: Creating a deadlock
+
+*Objective:* demonstrate deadlock detection.
+
+*Setup:* both panels connected, any isolation level.
+
+. *Left*: `UPDATE emp SET salary = salary * 1.1 WHERE eid = 103;`
+. *Right*: `UPDATE dept SET name = 'Handling' WHERE did = 50;`
+. *Left*: `UPDATE dept SET name = 'Handling 2' WHERE did = 50;` (waits for the right panel)
+. *Right*: `UPDATE emp SET salary = salary * 1.1 WHERE eid = 103;` (waits for the left panel, which closes the cycle)
+
+*Result:* the database detects the deadlock and aborts one of the two statements (Derby reports SQLSTATE `40001`).
+LockDemo shows the error in that panel's result area and rolls its transaction back, and the other statement completes.
+
+*Observation:* before the database resolves the deadlock, the lock display shows both transactions waiting (orange).
+Afterwards the locks of the victim disappear.
+
+TIP: On Derby you can use `SELECT` instead of `UPDATE` in steps 3 and 4, because readers take shared locks.
+That variant is in `Scripts/Derby/01 Demo.sql`.
+On H2 only the `UPDATE` variant deadlocks.
+
+=== Scenario 4: Repeatable Read and range locks
+
+*Objective:* see how long a reader keeps its locks, and how a range lock stops phantom rows.
+This scenario is meaningful on Derby and Db2; on H2 nothing blocks.
+
+*Setup:* set the left panel to *Serializable* (Derby `RR`) and connect both panels.
+
+*Left panel:*
+
+[source,sql]
+----
+SELECT AVG(salary) FROM emp WHERE eid BETWEEN 200 AND 300;
+----
+
+Click *Next* until the end of the result set.
+The left transaction stays open and keeps its locks.
+Compare the lock display with the one for *Read committed*: there, the shared locks are gone after the query.
+
+*Right panel:*
+
+[source,sql]
+----
+INSERT INTO emp(eid, name, salary) VALUES (222, 'Doe', 4711);
+----
+
+*Observation:* the insert falls into the range that the left transaction has read, so it waits (orange).
+Commit the left panel, and the insert completes.
+No phantom row appeared in the left transaction.
+
+=== Scenario 5: Lock escalation
+
+*Objective:* observe when many row locks turn into one table lock (Derby).
+
+*Setup:* a table with many rows, for example the `person` table that `Scripts/Derby/03 Persons.sql` fills.
+
+*Left panel:*
+
+[source,sql]
+----
+UPDATE person SET dob = dob;
+----
+
+*Observation:*
+
+* The statement changes nothing but locks every row.
+* The lock display shows many row locks, and when the number exceeds the threshold, Derby replaces them with a single table lock.
+* The threshold is the database property `derby.locks.escalationThreshold` (5000 locks by default).
+
+You can query and change it with:
+
+[source,sql]
+----
+VALUES SYSCS_UTIL.SYSCS_GET_DATABASE_PROPERTY('derby.locks.escalationThreshold');
+CALL SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY('derby.locks.escalationThreshold', '1000000');
+----
+
+[[scenario-for-update]]
+=== Scenario 6: SELECT FOR UPDATE and update locks
+
+*Objective:* demonstrate pessimistic locking with update locks.
+
+*Left panel:*
+
+[source,sql]
+----
+SELECT * FROM emp WHERE eid = 103 FOR UPDATE;
+----
+
+Click *Next* once.
+An update cursor takes its lock when it reads the row, so the `U` lock (Derby) appears only now.
+
+*Right panel:* run the same statement and click *Next*.
+
+*Observation:* the right panel is busy and shows an orange `WAIT` row, because two update locks are incompatible.
+On Derby, a plain `SELECT` without `FOR UPDATE` in the right panel is blocked as well at Read committed, because it needs a shared lock on the row and the writer's `U` lock is held until the left transaction ends or the row is released by the cursor.
+
+*Left panel:* click *Update* to convert the `U` lock into an `X` lock, or click *Commit* to release it.
+After the left transaction ends, the right panel gets its lock and shows the row.
+Commit the right panel, too.
+
+'''
+
+[[keyboard-shortcuts]]
+== Keyboard shortcuts
+
+=== Complete shortcut reference
+
+==== Left panel
+
+[cols="2,2,3"]
+|===
+|Action |Shortcut |Description
+
+|New script |kbd:[Ctrl+N] |Create a new empty script
+|Open script |kbd:[Ctrl+O] |Load a script from a file
+|Save script |kbd:[Ctrl+S] |Save the current script
+|Save script as |kbd:[Ctrl+Shift+S] |Save under a new name
+|Execute |kbd:[Alt+1] |Run the selected SQL
+|Next row |kbd:[Alt+2] |Fetch the next row of the result set
+|Commit |kbd:[Alt+3] |Commit the transaction
+|Update row |kbd:[Alt+4] |Write back the current row
+|Rollback |kbd:[Alt+5] |Roll the transaction back
+|===
+
+==== Right panel
+
+[cols="2,2,3"]
+|===
+|Action |Shortcut |Description
+
+|New script |kbd:[Ctrl+Alt+N] |Create a new empty script
+|Open script |kbd:[Ctrl+Alt+O] |Load a script from a file
+|Save script |kbd:[Ctrl+Alt+S] |Save the current script
+|Save script as |kbd:[Ctrl+Alt+Shift+S] |Save under a new name
+|Execute |kbd:[Alt+6] |Run the selected SQL
+|Next row |kbd:[Alt+7] |Fetch the next row of the result set
+|Commit |kbd:[Alt+8] |Commit the transaction
+|Update row |kbd:[Alt+9] |Write back the current row
+|Rollback |kbd:[Alt+0] |Roll the transaction back
+|===
+
+==== Editor and result area
+
+[cols="2,2,3"]
+|===
+|Action |Shortcut |Description
+
+|Auto-complete |kbd:[Ctrl+Space] |Show SQL keyword suggestions
+|Format SQL |kbd:[Ctrl+Shift+F] |Run the formatter (see <<sql-formatting>>)
+|Undo |kbd:[Ctrl+Z] |Undo the last change
+|Redo |kbd:[Ctrl+Y] |Redo the last undone change
+|Cut, copy, paste |kbd:[Ctrl+X], kbd:[Ctrl+C], kbd:[Ctrl+V] |Standard clipboard operations
+|Select all |kbd:[Ctrl+A] |Select all text, then execute everything
+|Clear result area |kbd:[Ctrl+L] |Empty the result area of the panel
+|Select isolation level |kbd:[Alt+I] |Move the focus to the Isolation drop-down
+|===
+
+==== Menus
+
+[cols="2,2"]
+|===
+|Menu |Shortcut
+
+|File (Left) |kbd:[Alt+L]
+|File (Right) |kbd:[Alt+R]
+|Theme |kbd:[Alt+T]
+|===
+
+=== Customizing shortcuts
+
+Keyboard shortcuts are not customizable.
+
+'''
+
+[[troubleshooting]]
+== Troubleshooting
+
+=== Connection issues
+
+==== Problem: Cannot connect to Derby
+
+*Symptoms:*
+
+* An error such as `java.sql.SQLException` appears in the result area
+* No lock display data
+
+*Solutions:*
+
+. *Check the JDBC URL*, for example:
++
+----
+jdbc:derby:memory:derbyDB;create=true
+----
+. *Check permissions*: an on-disk database needs write access to the working directory.
+. *Network server*: the URL `jdbc:derby://localhost:1527/DBIDB` needs a running Derby network server.
+. *Review the log*: check `derby.log` in the working directory.
+
+==== Problem: Cannot connect to H2
+
+*Symptoms:*
+
+* "Wrong user name or password" (SQL state 28000)
+* "Database ... not found", or an empty database on the second panel
+* The lock display is empty or shows only the own session
+
+*Solutions:*
+
+. *Use a named database* such as `jdbc:h2:mem:lockdemo;DB_CLOSE_DELAY=-1`. A URL without a name (`jdbc:h2:mem:`) gives every connection its own private database.
+. *Same credentials on both panels*: pass `;USER=...;PASSWORD=...` in the URL.
+. *A waiting statement fails after two seconds*: add `;LOCK_TIMEOUT=60000` to the URL.
+. *File databases*: close other processes that use the same file, or use the TCP server URL.
+
+[[troubleshooting-db2]]
+==== Problem: Cannot connect to Db2
+
+*Symptoms:*
+
+* "Driver not found" or "No suitable driver"
+* Connection timeout
+
+*Solutions:*
+
+. *Add the Db2 driver*. The manifest of `lockdemo.jar` lists `db2jcc4.jar` and `db2jcc_license_cisuz.jar` in its class path, so the easiest way is to copy both files into the *same directory as `lockdemo.jar`* and start with `java -jar lockdemo.jar`.
+Alternatively, put them on the class path yourself:
++
+[source,bash]
+----
+# Linux and macOS
+java -cp lockdemo.jar:db2jcc4.jar:db2jcc_license_cisuz.jar com.ibm.de103252.lockdemo.LockDemo
+# Windows
+java -cp lockdemo.jar;db2jcc4.jar;db2jcc_license_cisuz.jar com.ibm.de103252.lockdemo.LockDemo
+----
+. *Check the network*: verify that the Db2 subsystem is reachable.
+. *Verify the credentials*: user name and password in the URL or the driver properties must be valid.
+. *Check the port*: it is defined by your Db2 location.
+. *License file*: a Db2 for z/OS connection needs `db2jcc_license_cisuz.jar`.
+
+NOTE: LockDemo can show locks only for Db2 for z/OS, because the lock query uses the `BLOCKING_THREADS` table function.
+
+=== SQL execution issues
+
+==== Problem: The Execute button is disabled
+
+*Solutions:*
+
+. *Connect* the panel first.
+. *Select* the statement in the editor. Only selected text is executed.
+. *Wait* until the panel is no longer `Busy`.
+
+==== Problem: SQL statement fails to execute
+
+*Symptoms:*
+
+* An error message in the result area
+* No results displayed
+
+*Solutions:*
+
+. *Check the syntax*: verify that the SQL is valid for your database. Statements such as `BEGIN` or `START TRANSACTION` are not valid on Derby and Db2.
+. *Check permissions*: make sure that the user has the required privileges.
+. *Check the connection*: verify that it is still active.
+. *Read the error*: an error also rolls back the open transaction of that panel.
+
+==== Problem: A statement is cut in two, or only part of a script runs
+
+*Solutions:*
+
+. *Check separators*: statements must be separated by semicolons.
+. *Check strings and comments*: a semicolon inside a string literal or a comment splits the statement.
+. *Check the selection*: only the selected text runs.
+
+=== Lock display issues
+
+==== Problem: The lock display is empty
+
+*Symptoms:*
+
+* No locks shown
+* The table is blank
+
+*Solutions:*
+
+. *Connect the left panel*: the lock display uses the URL of the left panel. Without a left connection, nothing is shown.
+. *Open a transaction*: run a statement and do not commit. Locks are shown only while they exist.
+. *Check the database*: lock queries exist for Derby, H2 and Db2 for z/OS only.
+. *H2*: make sure that you connect with the user that created the database.
+
+==== Problem: Lock colors not showing
+
+*Symptoms:*
+
+* All rows have the same color
+* No highlighting
+
+*Solutions:*
+
+. *Check the mode*: the color depends on the `MODE` column. Modes that have no color, and Db2 rows without a `MODE` column, stay in the table color.
+. *Check the selection*: selected rows keep the selection color.
+. *Try another theme*: very dark or very light themes reduce the contrast of the pale colors.
+
+=== Script management issues
+
+==== Problem: Cannot save a script
+
+*Solutions:*
+
+. *Check permissions*: you need write access to the directory.
+. *Check disk space*: make sure that enough space is available.
+. *Check the path*: it must be valid.
+. *Try a different location*: save to a different directory.
+
+==== Problem: Script does not load
+
+*Solutions:*
+
+. *Check the file filter*: the dialog shows `.sql`, `.ddl` and `.dml` files by default. Choose *All Files* to see others.
+. *Check the format*: the file must be plain text.
+. *Check the encoding*: LockDemo reads files as UTF-8.
+
+=== Performance issues
+
+==== Problem: The application is slow or uses a lot of CPU
+
+*Solutions:*
+
+. *Reduce the number of locks*: the lock display queries the database every 250 ms, and a large number of locks (for example after a mass update) makes each refresh slower.
+. *Disconnect* a panel that you do not use. Disconnecting the left panel also stops the lock display.
+. *Check the database*: slow diagnostic queries affect the refresh.
+. *Restart* the application to clear any stuck state.
+
+'''
+
+[[tips]]
+== Tips and best practices
+
+=== General usage
+
+. *Start simple*: begin with basic `SELECT` statements before you try complex scenarios.
+. *Use comments*: describe your scenarios with `--` comments, and mark the side with `/* L */` and `/* R */`.
+. *Save often*: use kbd:[Ctrl+S]. There is no prompt when you exit.
+. *Organize scripts*: keep one folder per database.
+. *Name descriptively*: use clear names such as `deadlock_test_1.sql`.
+
+=== Lock testing
+
+. *End every experiment*: commit or roll back both panels before the next one. Open transactions keep their locks.
+. *Use both panels*: they simulate two concurrent users.
+. *Watch the colors*: orange rows show who waits, red rows show on what.
+. *Fetch row by row*: a query holds its row locks only for the rows that you fetched with *Next*.
+. *Mind the database*: Derby and Db2 lock readers, H2 does not. Compare them with the same script.
+
+=== SQL writing
+
+. *Leverage auto-completion*: press kbd:[Ctrl+Space] for suggestions.
+. *Fold long scripts*: collapse finished statements with the fold indicators.
+. *Do not rely on the formatter*: see <<sql-formatting>>.
+. *Test incrementally*: run simple queries first.
+
+=== Learning
+
+. *Start with the examples*: use the scenarios in this guide and the sample scripts.
+. *Experiment safely*: use test databases only.
+. *Read the appendix*: see <<appendix-b>> for the isolation level details.
+. *Compare databases*: run one scenario on Derby and on H2, and compare the lock display.
+
+'''
+
+[appendix]
+[[appendix-a]]
+== SQL reference
+
+=== Common SQL statements
+
+==== Queries
+
+[source,sql]
+----
+-- Simple SELECT
+SELECT * FROM table_name;
+
+-- SELECT with WHERE
+SELECT column1, column2 FROM table_name WHERE condition;
+
+-- SELECT with JOIN
+SELECT t1.*, t2.*
+FROM table1 t1
+JOIN table2 t2 ON t1.id = t2.id;
+
+-- SELECT FOR UPDATE (pessimistic locking, takes update locks)
+SELECT * FROM table_name WHERE id = 1 FOR UPDATE;
+----
+
+==== Data manipulation
+
+[source,sql]
+----
+INSERT INTO table_name (column1, column2) VALUES (value1, value2);
+
+UPDATE table_name SET column1 = value1 WHERE condition;
+
+DELETE FROM table_name WHERE condition;
+----
+
+==== Transaction control
+
+LockDemo starts a transaction with your first statement, so there is no `BEGIN`.
+
+[source,sql]
+----
+-- Commit transaction
+COMMIT;
+
+-- Rollback transaction
+ROLLBACK;
+
+-- Savepoint
+SAVEPOINT savepoint_name;
+ROLLBACK TO SAVEPOINT savepoint_name;
+----
+
+==== Data definition
+
+[source,sql]
+----
+CREATE TABLE table_name (
+    id INTEGER PRIMARY KEY,
+    name VARCHAR(100),
+    balance DECIMAL(10,2)
+);
+
+DROP TABLE table_name;
+
+CREATE INDEX idx_name ON table_name(column_name);
+----
+
+=== Derby-specific SQL
+
+[source,sql]
+----
+-- Show the isolation level of the connection
+VALUES CURRENT ISOLATION;
+
+-- Set the isolation level of the connection (this commits the current transaction)
+SET ISOLATION RR;   -- Serializable
+SET ISOLATION RS;   -- Repeatable Read
+SET ISOLATION CS;   -- Read committed
+SET ISOLATION UR;   -- Read uncommitted
+
+-- Set the isolation level for one statement only
+SELECT * FROM emp WITH RS;
+
+-- Look at the locks yourself (this is what LockDemo displays)
+SELECT * FROM SYSCS_DIAG.LOCK_TABLE;
+SELECT * FROM SYSCS_DIAG.TRANSACTION_TABLE;
+----
+
+NOTE: In LockDemo, use the *Isolation* drop-down instead of `SET ISOLATION`.
+The statement commits the current transaction, and the drop-down shows the level that the connection really uses.
+
+=== H2-specific SQL
+
+[source,sql]
+----
+-- Set the isolation level of the session
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+-- Show the sessions and the table locks (administrators only)
+SELECT * FROM INFORMATION_SCHEMA.SESSIONS;
+SELECT * FROM INFORMATION_SCHEMA.LOCKS;
+----
+
+=== Db2-specific SQL
+
+[source,sql]
+----
+-- Lock a table explicitly
+LOCK TABLE table_name IN EXCLUSIVE MODE;
+
+-- Set the isolation level for one statement
+SELECT * FROM table_name WITH RR;
+----
+
+'''
+
+[appendix]
+[[appendix-b]]
+== Isolation level details
+
+The table summarizes the anomalies that each level allows, according to the SQL standard.
+
+[cols="3,1,1,1"]
+|===
+|Level |Dirty read |Non-repeatable read |Phantom read
+
+|Read uncommitted |possible |possible |possible
+|Read committed |prevented |possible |possible
+|Repeatable Read |prevented |prevented |possible
+|Serializable |prevented |prevented |prevented
+|===
+
+NOTE: A database may be stricter than the standard.
+Derby's `RS` (JDBC Repeatable Read) holds read locks on the rows that it has read, and Derby's `RR` (JDBC Serializable) additionally locks key ranges.
+H2 uses snapshots instead of read locks.
+
+=== Read uncommitted
+
+*Characteristics:*
+
+* Lowest isolation level
+* Allows dirty reads, non-repeatable reads and phantom reads
+
+*Locking behavior:*
+
+* Readers acquire no shared locks and do not wait for writers
+* Writers hold exclusive locks until the end of the transaction
+* Minimal blocking
+
+*Use cases:* reporting queries, approximate counts, non-critical data.
+
+*Setting:*
+
+[source,sql]
+----
+SELECT * FROM emp WITH UR;                    -- Derby, Db2, one statement
+SET ISOLATION UR;                             -- Derby
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;  -- H2
+----
+
+=== Read committed
+
+*Characteristics:*
+
+* Prevents dirty reads
+* Allows non-repeatable reads and phantom reads
+
+*Locking behavior:*
+
+* Derby and Db2: shared locks for reads, released as soon as the row has been read. Readers wait for uncommitted writers.
+* H2: no read locks. Readers see the last committed version.
+* Exclusive locks for writes, held until the end of the transaction
+
+*Use cases:* most OLTP applications; the default of most databases.
+
+*Setting:*
+
+[source,sql]
+----
+SELECT * FROM emp WITH CS;                    -- Derby, Db2, one statement
+SET ISOLATION CS;                             -- Derby
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED;    -- H2
+----
+
+=== Repeatable Read
+
+*Characteristics:*
+
+* Prevents dirty reads and non-repeatable reads
+* Allows phantom reads
+
+*Locking behavior:*
+
+* Derby and Db2: shared locks on the rows that were read, held until the end of the transaction
+* H2: reads from a transaction-wide snapshot
+* Exclusive locks for writes, held until the end of the transaction
+* More blocking than Read committed on Derby and Db2
+
+*Use cases:* financial transactions, inventory management, critical business logic.
+
+*Setting:*
+
+[source,sql]
+----
+SELECT * FROM emp WITH RS;                    -- Derby, Db2, one statement
+SET ISOLATION RS;                             -- Derby
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ;   -- H2
+----
+
+=== Serializable
+
+*Characteristics:*
+
+* Highest isolation level
+* Prevents dirty reads, non-repeatable reads and phantom reads
+
+*Locking behavior:*
+
+* Derby and Db2: key-range or table locks for reads, held until the end of the transaction
+* Exclusive locks for writes
+* Maximum blocking
+
+*Use cases:* critical financial operations, regulatory compliance, cases where data integrity is paramount.
+
+NOTE: H2 documents that its `SERIALIZABLE` level does not guarantee a serializable execution of concurrent transactions that write.
+
+*Setting:*
+
+[source,sql]
+----
+SELECT * FROM emp WITH RR;                    -- Derby, Db2, one statement
+SET ISOLATION RR;                             -- Derby
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE;      -- H2
+----
+
+'''
+
+[appendix]
+[[appendix-c]]
+== Lock mode compatibility matrix
+
+The matrix shows whether a *requested* lock can be granted while another transaction holds a lock in the *held* mode.
+
+[cols="2,1,1,1,1,1,1",options="header"]
+|===
+|Held ↓ / Requested → |IS |IX |S |SIX |U |X
+
+|*IS* |✓ |✓ |✓ |✓ |✓ |✗
+|*IX* |✓ |✓ |✗ |✗ |✗ |✗
+|*S* |✓ |✗ |✓ |✗ |✗ |✗
+|*SIX* |✓ |✗ |✗ |✗ |✗ |✗
+|*U* |✓ |✗ |✗ |✗ |✗ |✗
+|*X* |✗ |✗ |✗ |✗ |✗ |✗
+|===
+
+*Legend:*
+
+* ✓ = compatible (both locks can be held at the same time)
+* ✗ = incompatible (the requesting transaction must wait)
+
+NOTE: The matrix is the textbook multi-granularity locking matrix, with the `U` row and column set to what Derby 10.17 does in practice.
+On Derby, a row that is locked with `U` blocks a plain read at Read committed, and a row that is held with `S` (Repeatable Read) blocks a `FOR UPDATE` request.
+The Derby Developer's Guide lists `S` and `U` as compatible, so test your own version if this detail matters.
+Derby uses `IS` and `IX` on tables; `SIX` appears mainly on Db2.
+
+'''
+
+[appendix]
+[[appendix-d]]
+== Glossary
+
+Auto-commit::
+Mode in which each SQL statement is committed automatically after it runs. LockDemo always turns it off.
+
+Blocking::
+A transaction has to wait until another transaction releases a lock.
+
+Commit::
+Operation that makes all changes of a transaction permanent.
+
+Concurrency::
+Several transactions that run at the same time.
+
+Deadlock::
+Two or more transactions wait for each other to release locks. The database resolves it by aborting one of them.
+
+Dirty read::
+Reading data that another transaction has changed but not yet committed.
+
+Exclusive lock (X)::
+Lock that prevents all other access to a resource.
+
+Isolation level::
+Degree to which a transaction is isolated from the changes of other transactions.
+
+Lock::
+Mechanism that controls concurrent access to database resources.
+
+Lock escalation::
+Replacing many fine-grained locks by fewer coarse-grained locks.
+
+MVCC::
+Multi-version concurrency control. The database keeps several versions of a row, so that readers do not need locks. H2 works this way.
+
+Non-repeatable read::
+Reading different values for the same row within one transaction.
+
+Phantom read::
+Seeing different rows when the same query is repeated within one transaction.
+
+Rollback::
+Operation that undoes all changes of a transaction.
+
+Shared lock (S)::
+Lock that allows other shared locks but blocks exclusive locks.
+
+Transaction::
+Unit of work that is atomic, consistent, isolated and durable (ACID).
+
+Two-phase locking::
+Protocol in which locks are acquired in a growing phase and released in a shrinking phase.
+
+Update lock (U)::
+Lock that an update cursor takes on a row it reads. Only one transaction can hold it at a time, which avoids the conversion deadlock of two readers that both want to write.
+
+'''
+
+[appendix]
+[[appendix-e]]
+== Frequently asked questions
+
+=== General questions
+
+*Is LockDemo free to use?*::
+The repository does not currently contain a license file. Contact the project owner before you redistribute it.
+
+*Can I use LockDemo in production?*::
+LockDemo is designed for testing and education. Use caution if you connect it to a production database.
+
+*Does LockDemo modify my database?*::
+Only if you execute statements that change data. Use a test database.
+
+*Can I connect to other databases besides Derby, H2 and Db2 for z/OS?*::
+The lock queries are database specific. Other databases may work for SQL execution, but the lock display is not available for them.
+
+=== Technical questions
+
+*Why don't I see any locks?*::
+Connect the left panel, run a statement, and do not commit. Locks exist only while a transaction is open.
+
+*What is the difference between STATE and STATUS?*::
+On Derby and H2, `STATE` is the lock state (`GRANT` or `WAIT`) and `STATUS` is the state of the transaction (`ACTIVE` or `IDLE`).
+On Db2, `STATE` contains the lock state of the object (for example `IX` or `X`).
+
+*Why does a read block on Derby but not on H2?*::
+Derby uses locks to isolate readers from writers; H2 uses multiple row versions.
+See <<h2-differences>>.
+
+*Why is my Execute button disabled?*::
+Nothing is selected in the editor, the panel is disconnected, or the panel is busy.
+
+*Can I export lock data?*::
+Not directly. Copy the data from the table or take a screenshot.
+
+*How often does the lock display refresh?*::
+Every 250 milliseconds (four times per second).
+
+*Can I change the refresh rate?*::
+Not through the user interface. It is a constant in the source code.
+
+=== Usage questions
+
+*How do I create a deadlock?*::
+See <<common-scenarios>>, Scenario 3.
+
+*What is the best isolation level for testing?*::
+Start with Read committed, then try the others.
+
+*Can I run the same script on both panels?*::
+Yes, but you have to load it into each panel separately.
+
+*How do I save my theme preference?*::
+You cannot; the theme is not remembered and LockDemo starts with *FlatLaf Light*.
+
+*Can I use LockDemo for performance testing?*::
+No. It is designed to help you understand lock behavior.
+
+'''
+
+== Support and resources
+
+=== Getting help
+
+* *Documentation*: this guide and `README.adoc`
+* *Script examples*: the `Scripts` directory
+* *Issue tracker*: report bugs and request features in the project repository
+
+=== Additional resources
+
+* *Apache Derby documentation*: https://db.apache.org/derby/docs/
+* *H2 documentation*: https://h2database.com/html/advanced.html
+* *Db2 for z/OS documentation*: https://www.ibm.com/docs/en/db2-for-zos
+* *SQL standard*: ISO/IEC 9075
+* *Book*: "Transaction Processing: Concepts and Techniques" by Gray and Reuter
+
+=== Contributing
+
+Contributions are welcome. Areas for improvement:
+
+* A formatter that keeps line breaks
+* Lock queries for more databases
+* A color legend and a persistent theme selection
+* More example scenarios
+* Documentation improvements
+
+'''
+
+== Version history
+
+=== Current version: 0.0.1-SNAPSHOT
+
+*Features:*
+
+* Dual connection panels
+* Real-time lock monitoring with color-coded conflict highlighting
+* Script management with unsaved changes protection
+* SQL editor with syntax highlighting, line numbers, code folding and auto-completion
+* Theme support (FlatLaf and JDK look and feels)
+* Transaction control and four isolation levels
+* Apache Derby, H2 and Db2 for z/OS support
+
+*Recent additions:*
+
+* H2 support, including a lock display for MVCC and sample scripts
+* Code folding for SQL
+* Result area *Clear* function (kbd:[Ctrl+L])
+* Requires Java 21
+
+'''
+
+_Last updated: {revdate}_ +
+_LockDemo User's Guide_

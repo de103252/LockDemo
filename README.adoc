@@ -1,0 +1,220 @@
+= LockDemo - Database Lock Demonstration Tool
+:icons: font
+:source-highlighter: rouge
+
+This application demonstrates lock-based synchronization in RDBMS.
+It connects twice to a specified database instance. You can then run SQL statements against the two different connections, monitor the locks that are held, and watch the effects.
+
+LockDemo supports *Apache Derby* and *H2*, each either *embedded* in the application or running as a *server*. It also supports *Db2 for z/OS* when you add the Db2 JDBC driver.
+
+The application is packaged with Apache Derby and H2 runtimes, which allow you to run against an in-memory Derby or H2 database without any additional setup.
+
+== Locking versus MVCC
+
+LockDemo is useful to demonstrate and compare two different approaches to transaction isolation:
+
+[cols="1,2,2",options="header"]
+|===
+| |Locking (Derby, Db2) |MVCC (H2)
+
+|Readers and writers
+|Readers take shared locks and can block writers, and be blocked by them
+|Readers see a committed version of the data and never block writers
+
+|Lock display
+|Row and table locks (`S`, `X`, `U`, `IS`, `IX`) and `WAIT` rows
+|Table locks only, and `WAIT` rows when two writers collide
+
+|Isolation level
+|A higher level holds more locks for longer, so more statements block
+|A higher level changes which version of the data is seen. Little blocks
+
+|Typical conflicts
+|Reader against writer, writer against writer, deadlocks
+|Writer against writer, deadlocks
+|===
+
+Run the same scenario on both databases and compare. For example, an uncommitted `UPDATE` on the left makes a `SELECT` on the right wait on Derby at Read committed, whereas on H2 the `SELECT` returns the old value immediately.
+
+== Requirements
+
+* *Java 21 or higher* (the application is compiled for Java 21)
+* A graphical desktop (the user interface is built with Swing)
+* Maven, only to build from source
+
+== Features
+
+=== Core Functionality
+
+* *Dual Connection Panels*: Execute SQL on two separate database connections simultaneously
+* *Real-time Lock Monitoring*: View active locks and their states in real-time, refreshed every 250 ms
+* *Multiple Isolation Levels*: Test different transaction isolation levels (Read Uncommitted, Read Committed, Repeatable Read, Serializable)
+* *Transaction Control*: Commit and rollback transactions independently on each connection
+* *SQL Editor*: Syntax highlighting, line numbers, code folding and auto-completion
+* *Script Manager*: Open and save SQL scripts per panel
+
+== Quick Start
+
+=== Keyboard Shortcuts
+
+==== Left Panel
+
+* `Ctrl+N` - New script
+* `Ctrl+O` - Open script
+* `Ctrl+S` - Save script
+* `Ctrl+Shift+S` - Save script as
+* `Alt-1` - Execute the selected SQL
+* `Alt-2` - Next row
+* `Alt-3` - Commit
+* `Alt-4` - Update row
+* `Alt-5` - Rollback
+
+==== Right Panel
+
+* `Ctrl+Alt+N` - New script
+* `Ctrl+Alt+O` - Open script
+* `Ctrl+Alt+S` - Save script
+* `Ctrl+Alt+Shift+S` - Save script as
+* `Alt-6` - Execute the selected SQL
+* `Alt-7` - Next row
+* `Alt-8` - Commit
+* `Alt-9` - Update row
+* `Alt-0` - Rollback
+
+==== Editor
+
+* `Ctrl+Space` - Auto-completion
+* `Ctrl+L` - Clear the result area
+
+== Supported Databases
+
+[cols="2,1,2",options="header"]
+|===
+|Database |Embedded |Server
+
+|*Apache Derby*
+|included
+|network server (client driver included)
+
+|*H2* (see <<h2-support,H2 support>>)
+|included
+|TCP server (driver included)
+
+|*IBM Db2 for z/OS*
+|
+|requires the Db2 JDBC driver
+|===
+
+For a server, the database server must already be running. LockDemo only contains the client side.
+
+Default entries of the URL drop-down:
+
+[cols="1,2",options="header"]
+|===
+|Purpose |JDBC URL
+
+|Derby, embedded in-memory (default)
+|`jdbc:derby:memory:derbyDB;create=true`
+
+|Derby, embedded on disk
+|`jdbc:derby:derbyDB;create=true`
+
+|Derby, network server
+|`jdbc:derby://localhost:1527/DBIDB`
+
+|H2, embedded shared in-memory
+|`jdbc:h2:mem:lockdemo;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=60000`
+|===
+
+[[h2-support]]
+=== H2 support
+
+H2 is bundled (`com.h2database:h2`) and its JDBC driver registers itself, so no extra
+classpath entries are needed. Select the H2 entry in the URL drop-down, or enter your own URL:
+
+[cols="1,2",options="header"]
+|===
+|Purpose |JDBC URL
+
+|Embedded, shared in-memory (default entry)
+|`jdbc:h2:mem:lockdemo;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=60000`
+
+|Embedded, file based
+|`jdbc:h2:file:./h2/lockdemo;LOCK_TIMEOUT=60000`
+
+|H2 server (TCP)
+|`jdbc:h2:tcp://localhost/~/lockdemo`
+|===
+
+Notes:
+
+* *Use the same named database on both panels.* Both panels open their own connection to
+`jdbc:h2:mem:lockdemo`; `DB_CLOSE_DELAY=-1` keeps the database alive when no connection is open.
+A plain `jdbc:h2:mem:` URL without a name creates a private database per connection.
+* *User and password* can be given in the URL: `...;USER=sa;PASSWORD=secret`. Without them H2
+creates the database with an empty user name and an empty password. That user has ADMIN rights,
+as does the user that created a database. The lock display needs such a user, because H2 shows
+other sessions only to administrators. Both panels must use the same credentials.
+* *MVCC*: H2 does not use read locks. Readers see the last committed version of a row, so they do
+not block writers. Compare this with Derby, where a reader waits for an uncommitted writer.
+* *Lock display*: H2 only exposes _table_ locks (`INFORMATION_SCHEMA.LOCKS`).
+LockDemo shows these as `X` (write), `IX` (session has uncommitted changes) or `IS`, and shows a
+statement that waits for another session (`INFORMATION_SCHEMA.SESSIONS`, state `BLOCKED`) as a
+`WAIT` row on the blocker's tables. There are no row locks.
+* *Lock timeout*: `LOCK_TIMEOUT` (milliseconds) controls how long a blocked statement waits
+before it fails; H2's default is 2 seconds, which is short for a live demo.
+* *Isolation levels*: all four JDBC levels can be set. H2 has no `WITH UR/CS/RS/RR` clause, so use the _Isolation_ drop-down.
+* Sample scripts: `Scripts/H2`.
+
+== Building
+
+[source,bash]
+----
+mvn clean package
+----
+
+This creates `target/lockdemo.jar` with all dependencies included.
+
+== Running
+
+[source,bash]
+----
+java -jar target/lockdemo.jar
+----
+
+For Db2 connections, copy `db2jcc4.jar` and `db2jcc_license_cisuz.jar` into the directory of `lockdemo.jar`. The manifest of the jar lists them in its class path.
+
+== Example Usage
+
+. *Connect to Database*: Enter a JDBC URL and click "Connect" on both panels. Connect the left panel first, because the lock display uses its URL
+. *Set Isolation Level*: Choose the desired isolation level for each connection
+. *Load or Write SQL*: Use the Script Manager to load a saved scenario or write SQL directly
+. *Execute Statements*: Select a statement and click "Execute". Only the selected text is run
+. *Monitor Locks*: Watch the lock table at the bottom to see active locks
+. *Test Scenarios*: Commit or rollback to observe lock behavior
+
+== Documentation
+
+* *link:USER_GUIDE.adoc[User's Guide]* - Comprehensive documentation covering all features
+
+== Recent Changes
+
+=== Version 0.0.1-SNAPSHOT (Latest)
+
+* *H2 support*: embedded or server, with a lock display for MVCC and sample scripts in `Scripts/H2`
+* *Locking versus MVCC*: the same scenarios can be compared on Derby and on H2
+* *Java 21*: the application now requires Java 21
+* *Code folding* for SQL, and a *Clear* function for the result area (`Ctrl+L`)
+* *Lock Conflict Highlighting*: Color-coded lock display (red=conflict, orange=waiting, light red=exclusive, green=shared)
+* *Enhanced SQL Editor*: Syntax highlighting, line numbers, auto-completion (75 keywords)
+* *Theme Support*: FlatLaf and JDK look and feels in the Theme menu (the selection is not saved)
+* *Improved Resource Management*: Proper cleanup of connections and threads
+* *Enhanced Wait Detection*: Better detection of waiting locks across databases
+
+=== Earlier
+
+* Added Script Manager functionality
+* Added menu bar with File operations
+* Improved keyboard shortcuts
+* Added unsaved changes protection
+* Enhanced SQL script parsing with comment support
